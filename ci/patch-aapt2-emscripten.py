@@ -36,33 +36,44 @@ text = text.replace(
 )
 top.write_text(text)
 
-# Android's <sys/cdefs.h> is a Bionic-specific header absent from
-# Emscripten/musl. Several NDK public Android headers include it directly,
-# not just configuration.h. Guard those includes only in the ephemeral
-# wasm32 checkout. Never import host glibc headers into Emscripten.
-native_headers = source / "submodules/native/include/android"
+# The sys/cdefs.h header belongs to Android Bionic, not Emscripten.
+# Guard direct imports in Android public headers used by AAPT2.
+# Patches only the ephemeral GitHub runner checkout (not user's sources).
+android_header_dirs = (
+    source / "submodules/native/include/android",
+    source / "submodules/logging/liblog/include/android",
+)
 patched_headers = []
-for header in sorted(native_headers.rglob("*.h")):
-    contents = header.read_text()
-    needle = "#include <sys/cdefs.h>"
-    if needle not in contents:
-        continue
-    if contents.count(needle) != 1:
-        raise RuntimeError(f"Ambiguous Bionic include: {header}")
-    contents = contents.replace(
-        needle,
-        "#if !defined(__EMSCRIPTEN__)\\n"
-        "#include <sys/cdefs.h>\\n"
-        "#endif /* !__EMSCRIPTEN__ */",
-        1,
-    )
-    header.write_text(contents)
-    patched_headers.append(header.relative_to(source).as_posix())
-for required in ("submodules/native/include/android/configuration.h",
-                 "submodules/native/include/android/asset_manager.h"):
+for directory in android_header_dirs:
+    if not directory.is_dir():
+        raise RuntimeError(f"Missing upstream Android headers: {directory}")
+    for header in sorted(directory.rglob("*.h")):
+        contents = header.read_text()
+        needle = "#include <sys/cdefs.h>"
+        if needle not in contents:
+            continue
+        if contents.count(needle) != 1:
+            raise RuntimeError(f"Ambiguous Bionic include: {header}")
+        guarded_include = (
+            "#if !defined(__EMSCRIPTEN__)\n"
+            "#include <sys/cdefs.h>\n"
+            "#endif /* !__EMSCRIPTEN__ */"
+        )
+        # Python must write real LF characters, not the two ASCII bytes '\\n'.
+        assert "\\n" not in guarded_include, "Escaped newline in generated C header"
+        contents = contents.replace(needle, guarded_include, 1)
+        if guarded_include not in contents:
+            raise RuntimeError(f"Failed to insert valid preprocessor directives into {header}")
+        header.write_text(contents)
+        patched_headers.append(header.relative_to(source).as_posix())
+for required in (
+    "submodules/native/include/android/configuration.h",
+    "submodules/native/include/android/asset_manager.h",
+    "submodules/logging/liblog/include/android/log.h",
+):
     if required not in patched_headers:
-        raise RuntimeError(f"Expected Bionic header missing or changed: {required}")
-print("Guarded Android Bionic includes for wasm32:", ", ".join(patched_headers))
+        raise RuntimeError(f"Expected Android Bionic header was not patched: {required}")
+print("Guarded", len(patched_headers), "Android Bionic headers for Emscripten")
 
 cmake = source / "cmake" / "aapt2.cmake"
 text = cmake.read_text()
