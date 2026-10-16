@@ -41,7 +41,10 @@ top.write_text(text)
 # Patches only the ephemeral GitHub runner checkout (not user's sources).
 android_header_dirs = (
     source / "submodules/native/include/android",
-    source / "submodules/logging/liblog/include/android",
+    source / "submodules/logging/liblog/include",
+    source / "submodules/core/libutils/include",
+    source / "submodules/libbase/include",
+    source / "submodules/base/libs/androidfw/include",
 )
 patched_headers = []
 for directory in android_header_dirs:
@@ -69,7 +72,7 @@ for directory in android_header_dirs:
 for required in (
     "submodules/native/include/android/configuration.h",
     "submodules/native/include/android/asset_manager.h",
-    "submodules/logging/liblog/include/android/log.h",
+    "submodules/logging/liblog/include/log/log_main.h",
 ):
     if required not in patched_headers:
         raise RuntimeError(f"Expected Android Bionic header was not patched: {required}")
