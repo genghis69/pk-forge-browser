@@ -10,17 +10,31 @@ let modulePromise;
 export function parseAapt2Symbols(text) {
  if(typeof text!=='string'||!text.trim())throw Error('AAPT2 n’a pas produit R.txt.');
  const ids=Object.create(null);
- for(const line of text.split(/\r?\n/)){
-  if(!line.trim())continue;
-  const match=line.trim().match(/^int\s+([a-zA-Z_]\w*)\s+([a-zA-Z_]\w*)\s+(0x[0-9a-fA-F]{8})$/);
-  if(!match){
-   if(/^int(?:\[\])?\s+styleable\b/.test(line.trim()))
-    throw Error('R.styleable requiert la génération complète de R.kt (tableaux non encore pris en charge).');
-   throw Error('Ligne R.txt AAPT2 inattendue : '+line.slice(0,140));
+ // AAPT2 emits both scalar R IDs and styleable arrays/indexes.
+ // Styleable indexes are not resource IDs; they must remain zero-based.
+ const lines=text.split(/\r?\n/);
+ for(let i=0;i<lines.length;i++){
+  let line=lines[i].trim();
+  if(!line||line.startsWith('#'))continue;
+  if(/^int\[\]\s+styleable\s+/.test(line)){
+   while(!line.includes('}')&&i+1<lines.length)line+=' '+lines[++i].trim();
+   const m=line.match(/^int\[\]\s+styleable\s+([A-Za-z_]\w*)\s*\{\s*([^}]*)\s*\}$/);
+   if(!m)throw Error('Tableau R.styleable mal formé : '+line.slice(0,140));
+   const key='styleable/'+m[1];
+   if(Object.hasOwn(ids,key))throw Error('R.styleable dupliqué : '+key);
+   const values=m[2].trim()?m[2].split(',').map(x=>x.trim()):[];
+   if(values.some(v=>!/^0x[\da-fA-F]{1,8}$/.test(v)))
+    throw Error('Valeur invalide dans R.styleable : '+key);
+   ids[key]=values.map(v=>Number.parseInt(v,16));
+   continue;
   }
-  const key=match[1]+'/'+match[2],id=Number.parseInt(match[3],16);
-  if(id<0x7f000000||Object.hasOwn(ids,key))throw Error('ID AAPT2 invalide/dupliqué : '+key);
-  ids[key]=id;
+  const m=line.match(/^int\s+([a-zA-Z_]\w*)\s+([a-zA-Z_]\w*)\s+(0x[\da-fA-F]{8}|\d+)$/);
+  if(!m)throw Error('Ligne R.txt AAPT2 inattendue : '+line.slice(0,140));
+  const key=m[1]+'/'+m[2],number=m[3].startsWith('0x')?Number.parseInt(m[3],16):Number(m[3]);
+  if(!Number.isSafeInteger(number)||number<0||number>0xffffffff||
+     (m[1]!=='styleable'&&number<0x7f000000)||Object.hasOwn(ids,key))
+   throw Error('ID AAPT2 invalide/dupliqué : '+key);
+  ids[key]=number;
  }
  if(!Object.keys(ids).length)throw Error('R.txt ne contient aucun identifiant.');
  return ids;
