@@ -97,7 +97,7 @@ jobs:
           gradle-version: '8.14.3'
       - name: Résoudre AndroidX Core et USB Serial uniquement
         run: |
-          gradle --no-daemon -b ci/android-dependencies.gradle stageAndroidClasspath --stacktrace
+          gradle --no-daemon -p ci stageAndroidClasspath --stacktrace
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
