@@ -8,6 +8,7 @@
 import {developmentPem,to64,from64} from './crypto.mjs';
 import {isGeneratedPath} from './analyzer.mjs';
 import {compileAapt2Wasm} from './aapt2-wasm.mjs';
+import {inspectSignedApk} from './apk-structure.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -193,6 +194,9 @@ export async function assembleRealApk(project,artifact){
   ? wasm.apkforge_sign_linked_apk(prepared.linkedApkBase64,payload,prepared.signingPem)
   : wasm.apkforge_sign_with_dex(prepared.input,payload);
  const out=new Blob([from64(signed)],{type:'application/vnd.android.package-archive'});
+ const structure=inspectSignedApk(new Uint8Array(await out.arrayBuffer()));
+ info('Structure ZIP : '+structure.entries+' entrées, alignment 4 vérifié ; v2='+structure.hasV2+', v3='+structure.hasV3+'.');
+ info('Marqueurs vérifiés, mais authentification cryptographique à contrôler avec apksigner sur Android/CI.');
  const finalZip=await JSZip.loadAsync(out);
  for(const name of ['AndroidManifest.xml','resources.arsc',...names]){
   if(!finalZip.file(name))throw Error('APK incomplet : '+name);
