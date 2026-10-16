@@ -70,7 +70,7 @@ test('Emscripten EEXIST errno 20 lors des mkdir répétés ne bloque pas AAPT2',
   if(args[0]==='compile')FS.writeFile(args[args.indexOf('-o')+1],Uint8Array.from([80,75,3,4]));
   if(args[0]==='link'){
    FS.writeFile(args[args.indexOf('-o')+1],Uint8Array.from([80,75,...Array(128).fill(0)]));
-   FS.writeFile(args[args.indexOf('--output-text-symbols')+1],new TextEncoder().encode('int layout main 0x7f020001\\n'));
+   FS.writeFile(args[args.indexOf('--output-text-symbols')+1],new TextEncoder().encode('int layout main 0x7f020001\n'));
   }
   return 0;
  }};
