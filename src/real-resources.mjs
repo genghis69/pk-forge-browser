@@ -75,7 +75,7 @@ export function normalizedManifest(xml,analysis){
  if(!Number.isInteger(versionCode)||versionCode<1)throw Error('versionCode Gradle absent ou invalide.');
  if(typeof analysis.version!=='string'||!/^[A-Za-z0-9._-]+$/.test(analysis.version))throw Error('versionName Gradle invalide.');
  let result=xml.replace(/<manifest\b[^>]*>/,tag=>{
-  const attr=(key,val)=>{const exp=new RegExp('\\\\b'+key.replace(':','\\\\:')+'\\s*=\\s*["\\'][^"\\']*["\\']');
+  const attr=(key,val)=>{const exp=new RegExp('\\b'+key+'\\s*=\\s*["\\x27][^"\\x27]*["\\x27]');
    return exp.test(tag)?tag.replace(exp,key+'="'+val+'"'):tag.slice(0,-1)+' '+key+'="'+val+'">';
   };
   tag=attr('package',name);
