@@ -12,7 +12,9 @@ if(!fs.existsSync(sdk)||fs.statSync(sdk).size<1e6)throw Error('Android 36 androi
 const libs=fs.readdirSync(deps).filter(n=>n.endsWith('.jar')).sort();
 if(!libs.some(n=>n.includes('usb-serial-for-android')))throw Error('USB Serial unresolved');
 if(!libs.some(n=>n.includes('androidx.core')))throw Error('AndroidX Core unresolved');
-const artifacts=[
+const helperPath=path.join(root,'helpers/1/classes-tool.jar');
+if(!fs.existsSync(helperPath))throw Error('CheerpJ classes tool jar is missing');
+const artifacts=[{name:'classes-tool.jar',relative:'helpers/1/classes-tool.jar',kind:'tool',...checksum(helperPath)},
  {name:'android.jar',relative:'sdk/36/android.jar',kind:'platform',...checksum(sdk)},
  ...libs.map(name=>({name,relative:'deps/elm327-v1/jars/'+name,kind:'dependency',...checksum(path.join(deps,name))}))
 ];

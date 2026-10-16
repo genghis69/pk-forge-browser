@@ -98,6 +98,21 @@ jobs:
       - name: Résoudre AndroidX Core et USB Serial uniquement
         run: |
           gradle --no-daemon -p ci stageAndroidClasspath --stacktrace
+      - name: Construire et tester l'assembleur JAR pour Kotlin dans Chrome
+        run: |
+          set -euo pipefail
+          mkdir -p ci/build/classes dist/toolchains/android/helpers/1
+          javac --release 17 -d ci/build/classes ci/BuildClassesJar.java
+          jar --create --file dist/toolchains/android/helpers/1/classes-tool.jar -C ci/build/classes .
+          KCP="$(find dist/toolchains/kotlin/2.2.20/jars -name '*.jar' -print | paste -sd ':' -)"
+          mkdir -p ci/build/proof
+          java -cp "$KCP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-reflect -jvm-target 17 -classpath "dist/toolchains/android/sdk/36/android.jar:dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar" -d ci/build/proof ci/samples/AndroidProof.kt
+          test -s ci/build/proof/dev/apkforge/proof/AndroidProof.class
+          java -cp dist/toolchains/android/helpers/1/classes-tool.jar dev.apkforge.tools.BuildClassesJar ci/build/proof ci/build/android-proof.jar
+          unzip -t ci/build/android-proof.jar
+          mkdir -p ci/build/dex
+          java -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 --min-api 26 --lib dist/toolchains/android/sdk/36/android.jar --output ci/build/dex ci/build/android-proof.jar
+          test -s ci/build/dex/classes.dex
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
