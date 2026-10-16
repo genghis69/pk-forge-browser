@@ -32,7 +32,7 @@ if(!Number.isInteger(ids['string/app_name'])||ids['string/app_name']<0x7f010000)
 const dex=fs.readFileSync('ci/build/android-activity-dex/classes.dex');
 if(dex.subarray(0,4).toString()!=='dex\n')throw Error('Synthetic input is not DEX');
 const binary=from64(apkforge_sign_with_dex(input,[to64(dex)]));
-if(binary.length<300||binary.subarray(0,2).toString()!=='PK')
+if(binary.length<300||(binary[0]!==0x50||binary[1]!==0x4b))
  throw Error('Signed APK was not produced');
 fs.mkdirSync('ci/build',{recursive:true});
 fs.writeFileSync('ci/build/apkforge-wasm-signed-proof.apk',binary);
