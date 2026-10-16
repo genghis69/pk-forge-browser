@@ -13,7 +13,7 @@ const deps=[
 'pack-asset-compiler = { path = "../pack-asset-compiler" }',
 'pack-sign = { path = "../pack-sign" }',
 'pack-zip = { path = "../pack-zip" }',
-'zip = "2.2.2"',
+'zip = { version = "7.0.0", default-features = false, features = ["deflate"] }',
 'xml = { package = "xml-rs", version = "0.8.20" }'
 ].join('\n');
 data=data.replace('[dependencies.getrandom]',deps+'\n\n[dependencies.getrandom]');
