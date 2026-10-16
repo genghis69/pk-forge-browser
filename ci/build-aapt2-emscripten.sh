@@ -21,6 +21,7 @@ emcmake cmake -S "$SRC" -B "$OUT" -GNinja \
   -DProtobuf_PROTOC_EXECUTABLE="$(command -v protoc)" \
   -DPROTOC_PATH="$(command -v protoc)" \
   -DPNG_SHARED=OFF \
+  -DOPENSSL_NO_ASM=ON \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_C_FLAGS="-sUSE_ZLIB=1" \
   -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1"
