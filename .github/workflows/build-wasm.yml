@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Récupérer APK Forge Browser
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Vérifier les modules JavaScript
         run: |
           node --check src/app.mjs
@@ -36,8 +36,12 @@ jobs:
       - name: Compiler le moteur Google Pack pour Chrome
         run: |
           mkdir -p "$GITHUB_WORKSPACE/dist/wasm/pack"
-          cd google-pack-source
-          wasm-pack build --locked --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack" pack-wasm
+          # wasm-pack v0.15 doit être exécuté depuis le crate pack-wasm
+          # et non la racine du workspace Cargo de Google Pack.
+          cd google-pack-source/pack-wasm
+          test -f Cargo.toml
+          grep -q '^\[package\]' Cargo.toml
+          wasm-pack build . --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
       - name: Préparer le site statique
