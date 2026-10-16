@@ -14,7 +14,7 @@ h1{font-size:clamp(32px,5.6vw,56px);line-height:1.06;letter-spacing:-2px;margin:
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}.step{border:1px solid #29384f;background:#10192a;padding:15px;border-radius:13px;color:#a8b4c9;min-width:0}.step.on{background:#16312f;color:#cafff0;border-color:#2c8b74}.step strong{font-size:13px;display:block}.step small{font-size:11px;display:block;margin-bottom:7px}
 .panel{padding:clamp(20px,4vw,32px);border:1px solid #2b3853;border-radius:21px;background:#111b2b;box-shadow:0 18px 70px #0005;display:none}.panel.active{display:block;animation:show .25s ease}@keyframes show{from{opacity:.4;transform:translateY(8px)}to{opacity:1;transform:none}}
 h2{font-size:23px;letter-spacing:-.5px;margin:0 0 6px}.drop{border:2px dashed #35516d;background:#0d1827;border-radius:17px;text-align:center;padding:52px 20px;margin:22px 0;cursor:pointer}.drop.over{background:#193b3a;border-color:#43c9aa}.drop .sym{font-size:44px;margin-bottom:9px}.drop strong{display:block;font-size:18px}.drop p{font-size:13px}.hidden{display:none!important}
-.btn{background:linear-gradient(95deg,#34cfa8,#3ea5e9);border:0;border-radius:11px;color:#061b26;font:700 14px inherit;cursor:pointer;padding:13px 19px;min-height:46px}.btn:disabled{opacity:.4;cursor:not-allowed}.btn.alt{color:#d5e2f4;background:#203048}.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+.btn{background:linear-gradient(95deg,#34cfa8,#3ea5e9);border:0;border-radius:11px;color:#061b26;font:700 14px inherit;cursor:pointer;padding:13px 19px;min-height:46px}.btn:disabled{opacity:.4;cursor:not-allowed}[hidden]{display:none!important}.btn.alt{color:#d5e2f4;background:#203048}.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:24px}.fact{border:1px solid #2b3e55;border-radius:12px;padding:16px;background:#0d1726;min-width:0}.fact small{color:#92a4bd;display:block;margin-bottom:6px}.fact b{font-size:15px;overflow-wrap:anywhere}.alert{border:1px solid #715334;color:#f1c89d;background:#312319;border-radius:12px;padding:14px;margin-top:20px;font-size:14px;white-space:pre-wrap}.good{border-color:#257d69;background:#12342d;color:#aaf5db}
 code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow:auto;border:1px solid #293d58;border-radius:12px;font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
 .result{font-size:18px;font-weight:700;color:#80f0c9}.meta{font-size:12px;color:#93a3bc;margin-top:25px}.meta a{color:#86ccff}
@@ -50,9 +50,9 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
   <button id="androidRuntimeDownload" class="btn alt" type="button" disabled>⬇ ZIP des DEX d’exécution</button>
  </div>
  </div>
- <div style="display:none">
- </div>
  <div id="androidCompileStatus" class="alert">En attente. Importe ton ZIP ELM327, puis lance la compilation groupée.</div>
+ <div id="androidCompilePhase" role="status" aria-live="polite" style="border:1px solid #38536f;border-radius:10px;padding:12px;margin-top:10px;color:#d3e4f5;font-size:13px">En attente de la prochaine étape.</div>
+ <div class="buttons"><button type="button" class="btn alt" id="androidReloadCompiler" hidden>↻ Recharger pour interrompre la JVM</button></div>
  <pre id="androidCompileLog">[APK FORGE ANDROID] Aucune source compilée.</pre>
 </div>
 <div style="border:1px solid #314a67;background:#0a1727;border-radius:14px;padding:19px;margin-top:23px">

@@ -7,11 +7,45 @@ import {toolchainUrl} from './toolchain-paths.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
 import {getKotlinRuntime} from './kotlin-lab.mjs';
 import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs';
+import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
 const el=id=>document.getElementById(id);
 let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
 const log=s=>{const n=el('androidCompileLog');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const status=(s,ok=false)=>{const n=el('androidCompileStatus');n.textContent=s;n.className='alert'+(ok?' good':'');};
+/** Observable execution: time is real, internal Kotlin progress is unknown. */
+async function observedJavaExecution(label,callback){
+ const phase=el('androidCompilePhase'),reload=el('androidReloadCompiler');
+ const observer=createExecutionObserver({
+  label,
+  onTick:current=>{
+   if(phase){
+    phase.textContent=label+' • '+current.text+' • '+current.message;
+    phase.dataset.severity=current.severity;
+   }
+   if(reload&&current.elapsed>=120000)reload.hidden=false;
+  },
+  onNotice:message=>log('DURÉE : '+message)
+ });
+ observer.start();
+ try{
+  const result=await callback(),elapsed=observer.stop();
+  log('FIN '+label+' : '+formatElapsed(elapsed)+'.');
+  if(phase){phase.textContent=label+' terminé en '+formatElapsed(elapsed);phase.dataset.severity='complete';}
+  if(reload)reload.hidden=true;
+  return result;
+ }catch(error){
+  const elapsed=observer.stop();
+  log('ERREUR '+label+' après '+formatElapsed(elapsed)+': '+(error?.message||String(error)));
+  if(reload)reload.hidden=false;
+  throw error;
+ }
+}
+function resetProgress(){
+ const phase=el('androidCompilePhase');
+ if(phase)phase.textContent='Préparation des outils, puis compilation JVM.';
+ const reload=el('androidReloadCompiler');if(reload)reload.hidden=true;
+}
 async function readSource(project,path) {
  const file=project.files[path];if(!file)throw Error('Source introuvable : '+path);
  if(file._data?.uncompressedSize>2e6)throw Error('Fichier Kotlin trop volumineux : '+path);
@@ -50,7 +84,8 @@ async function buildGroup(project){
  const jarRoot=classpath.find(a=>a.name==='android.jar');
  const tool=classpath.find(a=>a.name==='classes-tool.jar');
  if(!jarRoot||!tool)throw Error('Android SDK ou assembleur des fichiers .class manquant.');
- const compiled='/files/apkforge-kotlin/elm327-group';
+ const runId=Date.now().toString(36); // Dossier neuf : aucune classe issue d’une tentative antérieure.
+ const compiled='/files/apkforge-kotlin/elm327-group-'+runId;
  const paths=await runtime.library.java.nio.file.Paths;
  const files=await runtime.library.java.nio.file.Files;
  await files.createDirectories(await paths.get(compiled));
@@ -70,14 +105,14 @@ async function buildGroup(project){
  const cp=[virtualJarPath('kotlin-stdlib-2.2.20.jar'),...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency').map(x=>x.path)].join(':');
  log('Kotlin 2.2.20 : compilation groupée des '+profile.paths.length+' sources + R de diagnostic...');
  const t0=performance.now();
- const ret=await cheerpjRunMain('org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+ const ret=await observedJavaExecution('Compilation Kotlin des 16 sources',()=>cheerpjRunMain('org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
   runtime.manifest.jars.map(virtualJarPath).join(':'),
   '-no-reflect','-no-stdlib','-jvm-target','17','-classpath',cp,'-d',compiled,
-  ...mountedSources);
+  ...mountedSources));
  if(ret!==0)throw Error('Kotlin a échoué (code '+ret+'). Consulte la console F12 pour les classes Android/dépendances manquantes.');
  log('Kotlin : code de retour '+ret+', '+((performance.now()-t0)/1000).toFixed(1)+' s. Vérification des classes...');
- const jarPath='/files/apkforge-kotlin/elm327-compiled.jar';
- const jarRet=await cheerpjRunMain('dev.apkforge.tools.BuildClassesJar',tool.path,compiled,jarPath);
+ const jarPath='/files/apkforge-kotlin/elm327-compiled-'+runId+'.jar';
+ const jarRet=await observedJavaExecution('Assemblage des classes JVM',()=>cheerpjRunMain('dev.apkforge.tools.BuildClassesJar',tool.path,compiled,jarPath));
  if(jarRet!==0)throw Error('Impossible de rassembler les .class Kotlin (code '+jarRet+').');
  const blob=await cjFileBlob(jarPath);
  if(!blob||blob.size<100||!window.JSZip)throw Error('Archive de classes JVM absente ou ZIP indisponible.');
@@ -98,12 +133,12 @@ async function buildGroup(project){
    sha256:runtime.manifest.d8Sha256,moduleUrl,fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log};
   return mountJar(r8Artifact);
  })();
- const dexDirectory='/files/apkforge-kotlin/elm327-dex';
+ const dexDirectory='/files/apkforge-kotlin/elm327-dex-'+runId;
  await files.createDirectories(await paths.get(dexDirectory));
  const args=['--min-api','26','--lib',jarRoot.path];
  for(const item of classpath.filter(x=>x.kind==='dependency'))args.push('--classpath',item.path);
  args.push('--output',dexDirectory,jarPath);
- const dexCode=await cheerpjRunMain('com.android.tools.r8.D8',dexJar,...args);
+ const dexCode=await observedJavaExecution('D8 du code Kotlin',()=>cheerpjRunMain('com.android.tools.r8.D8',dexJar,...args));
  if(dexCode!==0)throw Error('D8 ne peut pas transformer les classes (code '+dexCode+').');
  dexBlob=await validateCompilerArtifact(await cjFileBlob(dexDirectory+'/classes.dex'),'dex');
  const d=buildDiagnostic(profile.paths.length,count,true);
@@ -130,7 +165,7 @@ async function buildRuntimeDex(){
    sha256:runtime.manifest.d8Sha256,moduleUrl,fetchFn:fetch,
    addFn:cheerpOSAddStringFile,progress:log
  });
- const path='/files/apkforge-kotlin/elm327-runtime-dex';
+ const path='/files/apkforge-kotlin/elm327-runtime-dex-'+Date.now().toString(36);
  const files=await runtime.library.java.nio.file.Files;
  const Paths=await runtime.library.java.nio.file.Paths;
  await files.createDirectories(await Paths.get(path));
@@ -139,7 +174,7 @@ async function buildRuntimeDex(){
  log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
  log('Traitement complet des bibliothèques. Cette étape peut prendre plusieurs minutes.');
  const started=performance.now();
- const code=await cheerpjRunMain('com.android.tools.r8.D8',dexJar,...argv);
+ const code=await observedJavaExecution('Fusion D8 des dépendances Android',()=>cheerpjRunMain('com.android.tools.r8.D8',dexJar,...argv));
  if(code!==0)throw Error('D8 runtime a échoué (code '+code+'). Regarde la console F12 pour les bibliothèques incompatibles.');
  if(!window.JSZip)throw Error('JSZip indisponible pour regrouper les sorties DEX.');
  const zip=new JSZip();
@@ -177,9 +212,13 @@ function download(blob,name){
  a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 export function attachAndroidCompiler(getProject){
+ el('androidReloadCompiler')?.addEventListener('click',()=>{
+  if(window.confirm('Recharger la page pour interrompre la JVM ? Réimporte le ZIP ensuite.'))window.location.reload();
+ });
  el('androidRuntimeDex').addEventListener('click',async()=>{
   if(locked)return;
   locked=true;el('androidRuntimeDex').disabled=true;el('androidCompileAll').disabled=true;
+  resetProgress();
   runtimeZip=null;el('androidRuntimeDownload').disabled=true;
   try{await buildRuntimeDex();}
   catch(e){log('ERREUR RUNTIME : '+e.message);status('Fusion runtime interrompue : '+e.message);console.error('APK Forge runtime D8',e);}
@@ -187,6 +226,7 @@ export function attachAndroidCompiler(getProject){
  });
  el('androidCompileAll').addEventListener('click',async()=>{
   if(locked)return;locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
+  resetProgress();
   el('androidRuntimeDex').disabled=true;el('androidRuntimeDownload').disabled=true;
   el('androidCompileAll').disabled=true;
   el('androidJarDownload').disabled=true;el('androidDexDownload').disabled=true;
