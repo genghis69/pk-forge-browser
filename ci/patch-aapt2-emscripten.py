@@ -283,5 +283,38 @@ for relative, replacements in string_iterator_patches.items():
     path.write_text(contents)
 print("Patched", len(string_iterator_patches), "C++ sources for libc++ string_view iterators.")
 
+
+# Emscripten libc does not declare the POSIX strerror_r() expected by
+# this Android libbase source. Use the actual strerror() message and copy
+# it into the caller's buffer with POSIX-style error reporting.
+strerror_source = source / "submodules/libbase/posix_strerror_r.cpp"
+contents = strerror_source.read_text()
+strerror_line = "return strerror_r(errnum, buf, buflen);"
+if contents.count(strerror_line) != 1:
+    raise RuntimeError("Upstream libbase posix_strerror_r has changed")
+replacement = """#if defined(__EMSCRIPTEN__)
+  if (buflen == 0) {
+    return ERANGE;
+  }
+  const char* message = strerror(errnum);
+  if (message == nullptr) {
+    buf[0] = '\\0';
+    return EINVAL;
+  }
+  const size_t actual_length = strlen(message);
+  const size_t copy_length = actual_length < buflen ? actual_length : buflen - 1;
+  memcpy(buf, message, copy_length);
+  buf[copy_length] = '\\0';
+  return actual_length >= buflen ? ERANGE : 0;
+#else
+  return strerror_r(errnum, buf, buflen);
+#endif"""
+contents = (
+    "#include <errno.h>\n#include <string.h>\n"
+    + contents.replace(strerror_line, replacement, 1)
+)
+strerror_source.write_text(contents)
+print("Ported Android libbase errno-to-message conversion for wasm32.")
+
 cmake.write_text(text)
 print("Patched isolated AOSP AAPT2 sources for Emscripten, including Bionic configuration header.")
