@@ -2,13 +2,13 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
-import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileRuntimeDexForApk} from './android-compiler.mjs';
+import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileRuntimeDexForApk,getLastD8Diagnostic} from './android-compiler.mjs';
 import {attachRealResourceCompiler,prepareRealResources,assembleRealApk} from './real-resources.mjs';
 import {runAutomaticApkBuild} from './auto-build.mjs';
 import {assessAapt2,aapt2Report} from './aapt2-diagnostics.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
-let autoBusy=false;
+let autoBusy=false,autoDiagnosticUrl=null;
 const autoStatus=(message,good=false)=>{
  const el=$('autoBuildStatus');if(el){el.textContent=message;el.className='alert'+(good?' good':'');}
 };
@@ -23,6 +23,9 @@ async function startAutomaticBuild(){
  const start=$('autoBuild'),progress=$('autoBuildProgress');
  if(start)start.disabled=true;
  if(progress)progress.value=0;
+ const reportLink=$('autoD8Report');
+ if(reportLink){reportLink.style.display='none';reportLink.removeAttribute('href');}
+ if(autoDiagnosticUrl){URL.revokeObjectURL(autoDiagnosticUrl);autoDiagnosticUrl=null;}
  if($('autoBuildLog'))$('autoBuildLog').textContent='[APK FORGE AUTO] Démarrage de la compilation automatique.';
  show(2);
  audit();
@@ -69,6 +72,18 @@ async function startAutomaticBuild(){
  }catch(error){
   autoStatus('Compilation interrompue : '+String(error?.message||error));
   autoLog('ERREUR : '+String(error?.stack||error));
+  if(error?.dexMapDiagnostic){
+   autoLog('MAP_LIST du DEX défectueux : '+JSON.stringify(error.dexMapDiagnostic.entries?.slice(0,25)??[]));
+  }
+  const diagnostic=getLastD8Diagnostic();
+  const report=$('autoD8Report');
+  if(diagnostic&&report){
+   autoDiagnosticUrl=URL.createObjectURL(diagnostic);
+   report.href=autoDiagnosticUrl;
+   report.download='apkforge-d8-diagnostic.zip';
+   report.style.display='inline-block';
+   autoLog('RAPPORT PRÊT : clique sur « Télécharger le diagnostic D8 » ci-dessous. Aucune recompilation nécessaire.');
+  }
   console.error('APK Forge automatique',error);
   show(2);
  }finally{

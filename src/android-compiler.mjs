@@ -12,7 +12,8 @@ import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
 import {getResourceSession,linkedRCode,refreshApkButton} from './real-resources.mjs';
 import {verifyDexIntegrity,dexMapDiagnostic} from './dex-integrity.mjs';
 const el=id=>document.getElementById(id);
-let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
+let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null,lastD8Diagnostic=null;
+export function getLastD8Diagnostic(){return lastD8Diagnostic;}
 const moduleUrl=import.meta.url;
 const log=s=>{const n=el('androidCompileLog');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const status=(s,ok=false)=>{const n=el('androidCompileStatus');n.textContent=s;n.className='alert'+(ok?' good':'');};
@@ -199,6 +200,7 @@ async function compileStandaloneDex(){
  * Produces a ZIP containing classes.dex/classes2.dex..., never an APK.
  */
 async function buildRuntimeDex(){
+ lastD8Diagnostic=null;
  if(!lastCompilation)throw Error('Compile les sources Kotlin avant de générer le DEX avec les bibliothèques.');
  const {jarPath,jarRoot,classpath,runtime,sourceCount,classCount}=lastCompilation;
  const plan=planRuntimeJars(classpath);
@@ -270,14 +272,17 @@ async function buildRuntimeDex(){
      threadMode:selectedD8ThreadMode(),dependencyNames:plan.dependencies.map(x=>x.name)
     },null,2));
     const payload=await report.generateAsync({type:'blob',compression:'STORE'});
+    lastD8Diagnostic=payload;
     const url=URL.createObjectURL(payload);
     const link=document.createElement('a');link.href=url;
     link.download='apkforge-d8-diagnostic.zip';document.body.append(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     log('Rapport automatique téléchargé : apkforge-d8-diagnostic.zip');
    }catch(reportError){log('Impossible de télécharger le rapport D8 : '+reportError.message);}
-   throw Error('DEX '+filename+' invalide même en mode ZIP : '+error.message+
+   const dexError=Error('DEX '+filename+' invalide même en mode ZIP : '+error.message+
     '. APK bloqué avant signature.',{cause:error});
+   dexError.dexMapDiagnostic=details;
+   throw dexError;
   }
   zip.file(filename,buffer,{binary:true,compression:'STORE'});
   dexFiles++;bytes+=buffer.length;

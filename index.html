@@ -37,6 +37,7 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  <h2>⚡ Compilation automatique de ton APK</h2>
  <p>Après l’import de ton ZIP, APK Forge enchaîne automatiquement AAPT2 → Kotlin → D8 → assemblage et signature. Aucun bouton intermédiaire ni téléchargement de JAR requis.</p>
  <button class="btn" type="button" id="autoBuild">▶ Lancer ou recommencer la compilation automatique</button>
+ <a class="btn alt" id="autoD8Report" style="display:none;margin-left:8px" download="apkforge-d8-diagnostic.zip">⬇ Télécharger le diagnostic D8 (sans recompiler)</a>
  <div id="autoBuildStatus" class="alert" role="status" aria-live="polite">En attente d’un projet ZIP.</div>
  <progress id="autoBuildProgress" max="4" value="0" style="display:block;width:100%;height:13px;margin-top:15px;accent-color:#34cfa8"></progress>
  <pre id="autoBuildLog">[APK FORGE AUTO] En attente du ZIP.</pre>
