@@ -231,6 +231,7 @@ jobs:
             -I dist/toolchains/android/sdk/36/android.jar \
             --manifest ci/build/aapt2-src/AndroidManifest.xml \
             --output-text-symbols ci/build/aapt2-R.txt \
+            --auto-add-overlay \
             -R ci/build/aapt2-compiled.zip
           node ci/test-aapt2-link.mjs --verify
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature

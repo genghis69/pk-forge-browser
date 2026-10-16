@@ -92,7 +92,7 @@ export async function compileAapt2Wasm({project,manifest,resourcePaths,moduleUrl
  if(intermediate.length<4||intermediate[0]!==0x50||intermediate[1]!==0x4b)
   throw Error('AAPT2 compile n’a pas produit une archive .flat valide.');
  runAapt2(instance,['link','-o',linked,'-I',sdk,'--manifest',manifestPath,
-  '--output-text-symbols',symbols,'-R',compiled]);
+  '--output-text-symbols',symbols,'--auto-add-overlay','-R',compiled]);
  const apk=new Uint8Array(FS.readFile(linked));
  const rText=new TextDecoder().decode(FS.readFile(symbols));
  const ids=parseAapt2Symbols(rText);
