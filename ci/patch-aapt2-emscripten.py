@@ -36,24 +36,33 @@ text = text.replace(
 )
 top.write_text(text)
 
-# Android's <sys/cdefs.h> comes from Bionic, not the Emscripten/musl SDK.
-# The configuration API header uses explicit extern "C" and defines
-# __INTRODUCED_IN itself when missing. Disable ONLY this Bionic include for
-# wasm32, leaving all native targets unchanged. Additional Android-only
-# constructs must be diagnosed separately rather than silently stubbed.
-configuration = source / "submodules/native/include/android/configuration.h"
-config = configuration.read_text()
-needle = "#include <sys/cdefs.h>"
-if config.count(needle) != 1:
-    raise RuntimeError("Unexpected configuration.h: cannot safely patch sys/cdefs.h")
-config = config.replace(
-    needle,
-    "#if !defined(__EMSCRIPTEN__)\n"
-    "#include <sys/cdefs.h>\n"
-    "#endif /* !__EMSCRIPTEN__ */",
-    1,
-)
-configuration.write_text(config)
+# Android's <sys/cdefs.h> is a Bionic-specific header absent from
+# Emscripten/musl. Several NDK public Android headers include it directly,
+# not just configuration.h. Guard those includes only in the ephemeral
+# wasm32 checkout. Never import host glibc headers into Emscripten.
+native_headers = source / "submodules/native/include/android"
+patched_headers = []
+for header in sorted(native_headers.rglob("*.h")):
+    contents = header.read_text()
+    needle = "#include <sys/cdefs.h>"
+    if needle not in contents:
+        continue
+    if contents.count(needle) != 1:
+        raise RuntimeError(f"Ambiguous Bionic include: {header}")
+    contents = contents.replace(
+        needle,
+        "#if !defined(__EMSCRIPTEN__)\\n"
+        "#include <sys/cdefs.h>\\n"
+        "#endif /* !__EMSCRIPTEN__ */",
+        1,
+    )
+    header.write_text(contents)
+    patched_headers.append(header.relative_to(source).as_posix())
+for required in ("submodules/native/include/android/configuration.h",
+                 "submodules/native/include/android/asset_manager.h"):
+    if required not in patched_headers:
+        raise RuntimeError(f"Expected Bionic header missing or changed: {required}")
+print("Guarded Android Bionic includes for wasm32:", ", ".join(patched_headers))
 
 cmake = source / "cmake" / "aapt2.cmake"
 text = cmake.read_text()
