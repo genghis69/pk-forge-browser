@@ -52,7 +52,11 @@ export function linkedRCode(namespace,ids,sourceTexts=[]){
  const kinds=new Map();
  for(const [key,id] of Object.entries(ids)){
   const parts=key.split('/');
-  if(parts.length!==2||!parts.every(s=>/^[A-Za-z_]\w*$/.test(s))||!Number.isInteger(id)||id<0x7f010000)
+  if(parts.length!==2||!parts.every(s=>/^[A-Za-z_]\w*$/.test(s))||
+     (parts[0]==='styleable'
+       ? !(Array.isArray(id)&&id.every(x=>Number.isInteger(x)&&x>=0&&x<=0xffffffff)||
+           Number.isInteger(id)&&id>=0&&id<=0xffffffff)
+       : !Number.isInteger(id)||id<0x7f000000))
    throw Error('Ressource réelle invalide : '+key);
   if(!kinds.has(parts[0]))kinds.set(parts[0],[]);
   kinds.get(parts[0]).push({name:parts[1],id});
@@ -60,7 +64,11 @@ export function linkedRCode(namespace,ids,sourceTexts=[]){
  for(const [kind,values] of [...kinds].sort(([a],[b])=>a.localeCompare(b))){
   result+='  object '+kind+' {\n';
   for(const v of values.sort((a,b)=>a.name.localeCompare(b.name))){
-   result+='    const val '+v.name+': Int = 0x'+v.id.toString(16)+'\n';
+   if(Array.isArray(v.id)){
+    result+='    val '+v.name+': IntArray = intArrayOf('+v.id.map(n=>'0x'+n.toString(16)).join(', ')+')\n';
+   }else{
+    result+='    const val '+v.name+': Int = '+(kind==='styleable'?String(v.id):'0x'+v.id.toString(16))+'\n';
+   }
   }
   result+='  }\n';
  }
