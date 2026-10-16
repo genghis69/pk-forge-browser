@@ -58,3 +58,20 @@ test('l’analyse complète retient toutes les sources Kotlin même au-delà des
  assert.equal(r.kotlinPaths.length,44);
  assert.equal(r.sourceSamples.length,30);
 });
+
+test('Gradle Groovy TrainManager : metadata, publicités et exclusion des tests Java',()=>{
+ const root='TrainManager_Gradle_Publicites_v4/';
+ const manifest=root+'app/src/main/AndroidManifest.xml',gradle=root+'app/build.gradle';
+ const paths=[manifest,gradle,root+'build.gradle',root+'tests/CookieInputTest.java',
+  ...['CookieInput','MainActivity','RewardedAds','WebAppBridge'].map(x=>root+'app/src/main/java/fr/local/trainmanagersession/'+x+'.java'),
+  root+'app/src/main/res/layout/activity_main.xml'];
+ const r=projectInfo(paths,{
+  [manifest]:'<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:label="Train Manager Session + Pubs"/></manifest>',
+  [gradle]:`plugins { id 'com.android.application' }; android { namespace 'fr.local.trainmanagersession'; compileSdkVersion 35; defaultConfig { applicationId 'fr.local.trainmanagersession'; minSdkVersion 23; targetSdkVersion 35; versionCode 4; versionName '4.0' } }; dependencies { implementation 'com.google.android.gms:play-services-ads:23.6.0'; implementation 'androidx.core:core:1.13.1' }`
+ });
+ assert.equal(r.java,4);assert.equal(r.ignoredTestSources,1);assert.equal(r.packageName,'fr.local.trainmanagersession');
+ assert.equal(r.namespace,'fr.local.trainmanagersession');
+ assert.equal(r.version,'4.0');assert.equal(r.versionCode,'4');
+ assert.equal(r.sdk,'35');assert.equal(r.minSdk,'23');assert.equal(r.targetSdk,'35');
+ assert.deepEqual(r.dependencies,['com.google.android.gms:play-services-ads:23.6.0','androidx.core:core:1.13.1']);
+});

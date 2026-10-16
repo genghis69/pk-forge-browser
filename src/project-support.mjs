@@ -15,7 +15,7 @@ export function classifyAndroidProject(a){
  if(a.nativeLibs>0)return fail(a.nativeLibs+' bibliothèque(s) natives .so détectée(s). La chaîne actuelle ne sait pas empaqueter et vérifier les ABI natives.');
  if(a.aarFiles>0)return fail(a.aarFiles+' archive(s) .aar locale(s) détectée(s). La fusion de leurs classes, manifestes et ressources n’est pas encore intégrée.');
  if(java>0 && kotlin>0)return fail('Projet mixte détecté : '+summary+' Le navigateur sait compiler Kotlin pour les projets pris en charge, mais ne compile pas encore les sources Java du même module.');
- if(java>0)return fail('Projet Java détecté : '+java+' fichier(s) .java, aucun Kotlin. Le compilateur Java Android n’est pas encore intégré : l’application ne peut pas être créée en ignorant ces sources.');
+ if(java>0)return fail('Projet Java détecté : '+java+' fichier(s) .java, aucun Kotlin. Le compilateur Java Android n’est pas encore intégré : l’application ne peut pas être créée en ignorant ces sources. Dépendances : '+(a.dependencies?.join(', ')||'aucune déclarée')+'.');
  if(kotlin>0){
   const paths=a.kotlinPaths??a.sourceSamples?.filter(p=>p.endsWith('.kt'))??[];
   const selected=paths.filter(p=>/(?:^|\/)src\/main\/(?:java|kotlin)\/.*\.kt$/.test(p));
