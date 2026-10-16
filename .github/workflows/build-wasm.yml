@@ -26,6 +26,8 @@ jobs:
           node --check src/analyzer.mjs
           node --check src/kotlin-lab.mjs
           node --check src/compiler-results.mjs
+          node --check src/jvm-artifacts.mjs
+          node --test tests/jvm-artifacts.test.mjs
           node --test tests/compiler-results.test.mjs
           node --check src/toolchain-paths.mjs
           node --test tests/toolchain-paths.test.mjs
@@ -48,8 +50,9 @@ jobs:
           set -euo pipefail
           javac --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED -d ci ci/PatchKotlinCpuTime.java
           java --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED -cp ci PatchKotlinCpuTime "dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar"
-          if javap -classpath dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar -c -p org.jetbrains.kotlin.util.PerformanceManager | grep 'ThreadMXBean.setThreadCpuTimeEnabled'; then
-            echo "::error::Kotlin PerformanceManager still enables unsupported thread CPU measurement"
+          if javap -classpath dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar -c -p org.jetbrains.kotlin.util.PerformanceManager |
+            grep -E 'ThreadMXBean\.(setThreadCpuTimeEnabled|getCurrentThreadUserTime|getCurrentThreadCpuTime)'; then
+            echo "::error::Le compilateur Kotlin appelle encore les fonctions CPU non prises en charge par CheerpJ"
             exit 1
           fi
       - name: Compiler un vrai fichier Kotlin en classes JVM sur la machine de validation

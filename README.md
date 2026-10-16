@@ -52,3 +52,11 @@ Le chemin virtuel `/app/` de CheerpJ correspond à la racine du domaine. Sur ce 
 Kotlin 2.2.20 appelle `ThreadMXBean.setThreadCpuTimeEnabled(true)` à l'initialisation de `PerformanceManager`. CheerpJ 4.3 ne prend pas en charge cet appel et déclenche une `UnsupportedOperationException`. Le script versionné `ci/PatchKotlinCpuTime.java` modifie **uniquement l'instruction INVOKEINTERFACE de ce setter** dans `kotlin-compiler-embeddable-2.2.20.jar` via l'ASM inclus dans Java 17. La suppression conserve le reste de la méthode, y compris l'initialisation du ThreadMXBean. La modification est contrôlée (exactement une occurrence) puis le JAR adapté est testé sur le runner avant publication. Le laboratoire confirme désormais l'existence et la signature du fichier `.class`/`.dex`, même si CheerpJ annonce un code de retour 0 malgré une exception d'un thread Java.
 
 Cette compatibilité ciblée **ne garantit pas** que d'autres fonctionnalités JVM, fichiers ou API natives exigées par Kotlin seront disponibles sous CheerpJ. Aucune compilation ELM327 complète n'est actuellement annoncée.
+
+## Correctif CheerpJ : absence de HTTP Range et statistiques CPU
+
+Kotlin 2.2.20 dépend de trois appels `ThreadMXBean` non pris en charge par CheerpJ 4.3. Notre patch ASM remplace les deux mesures CPU par `0L` et ignore leur activation, sans modifier le reste du compilateur. Le nombre d'instructions remplacées est vérifié dans GitHub Actions.
+
+GitHub Pages ne répond pas toujours aux requêtes HTTP `Range` exigées par CheerpJ pour lire les JAR en `/app/`. Dorénavant `src/jvm-artifacts.mjs` charge chaque JAR intégralement avec fetch, contrôle l'empreinte SHA-256 issue du manifeste, puis monte le `Uint8Array` dans `/str/` via `cheerpOSAddStringFile`. Ceci n'exécute jamais les sources utilisateur sur GitHub : la compilation demeure dans Chrome. La mémoire requise augmente sensiblement ; les composants sont mis en mémoire uniquement à la première initialisation.
+
+Le résultat final dans Chrome reste à confirmer : GitHub Actions ne teste pas la JVM CheerpJ, seulement Java 17 natif et les règles de montage avec des simulations.

@@ -1,5 +1,6 @@
 // APK Forge Browser : laboratoire JVM 17, Kotlin 2.2.20 et D8 (expérimental).
-import {toolchainUrl,toCheerpJPath,kotlinJarRelative,d8JarRelative,checkToolchainFiles} from './toolchain-paths.mjs';
+import {toolchainUrl} from './toolchain-paths.mjs';
+import {virtualJarPath,mountKotlinJars,mountD8} from './jvm-artifacts.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
 // Les entrées et les fichiers compilés ne quittent pas le navigateur.
 const el=id=>document.getElementById(id);
@@ -16,8 +17,8 @@ async function installLoader(){
  });
 }
 const moduleUrl=import.meta.url;
-const kotlinJar=(name)=>toCheerpJPath(kotlinJarRelative(name),moduleUrl);
-const d8Jar=()=>toCheerpJPath(d8JarRelative(env.d8Version,env.d8Jar),moduleUrl);
+const kotlinJar=(name)=>virtualJarPath(name);
+const d8Jar=()=>virtualJarPath(env.d8Jar);
 const baseUrl=toolchainUrl('kotlin/2.2.20/manifest.json',moduleUrl);
 async function init(){
  if(compilerReady)return;
@@ -27,18 +28,14 @@ async function init(){
  env=await response.json();
  if(env.version!=='2.2.20'||!env.jars?.includes('kotlin-compiler-embeddable-2.2.20.jar'))throw Error('Composants Kotlin incomplets.');
  say(env.jars.length+' bibliothèques JVM répertoriées ('+(env.totalBytes/1048576).toFixed(1)+' Mio).');
- say('Vérification des URL des bibliothèques avant la JVM...');
- const failures=await checkToolchainFiles(env,moduleUrl,fetch);
- if(failures.length){
-  const first=failures[0];
-  say('BIBLIOTHÈQUES MANQUANTES : '+failures.length+' ressource(s). Exemple : HTTP '+first.status+' '+first.url);
-  throw Error('Le site ne sert pas tous les JAR requis. '+failures.length+' erreur(s), première : '+first.url+' (HTTP '+first.status+').');
- }
- say('✔ Toutes les bibliothèques présentes sur GitHub Pages sous '+new URL('../toolchains/',moduleUrl).pathname);
+ say('Les JAR seront entièrement chargés dans le navigateur pour éviter HTTP Range.');
  await installLoader();
  say('Démarrage Java 17 dans Chrome. Ce premier lancement peut prendre du temps.');
  await cheerpjInit({version:17,status:'none'});
  library=await cheerpjRunLibrary('');
+ say('Téléchargement complet des JAR dans /str/ et contrôle SHA-256...');
+ await mountKotlinJars(env,moduleUrl,fetch,cheerpOSAddStringFile,say);
+ say('Les bibliothèques Kotlin sont prêtes dans la JVM du navigateur.');
  compilerReady=true;
  state('JVM Java 17 initialisée. Lance un essai de compilation Kotlin.',true);
  say('JVM Java 17 prête. Aucun ZIP n’a été envoyé vers un serveur de compilation.');
@@ -67,7 +64,7 @@ async function compile(source,filename,isDemo){
  }finally{
   if(typeof cheerpOSRemoveStringFile==='function')cheerpOSRemoveStringFile(input);
  }
- say('Code de retour Kotlin : '+code);
+ say('Code de retour Kotlin : '+code+'. Validation indépendante du fichier produit en cours...');
  if(code!==0)throw Error('Compilation Kotlin interrompue (code '+code+'). Un fichier Android réel requiert android.jar et les dépendances Maven.');
  if(isDemo){
   const blob=await validateCompilerArtifact(await cjFileBlob(output+'/ForgeProof.class'),'class');
@@ -85,6 +82,8 @@ async function dex(){
  if(!demoCompiled)throw Error('Commence par compiler l’exemple Kotlin.');
  if(!env?.d8Jar)throw Error('D8 absent du catalogue : téléchargement non disponible.');
  const output='/files/apkforge-kotlin/dex';
+ say('Montage du JAR D8 dans la mémoire de Chrome...');
+ await mountD8(env,moduleUrl,fetch,cheerpOSAddStringFile,say);
  await mkdir(output);
  say('D8 '+env.d8Version+' : conversion de ForgeProof.class en classes.dex...');
  const code=await cheerpjRunMain('com.android.tools.r8.D8',d8Jar(),

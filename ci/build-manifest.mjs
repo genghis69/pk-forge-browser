@@ -10,8 +10,10 @@ const artifacts=jars.map(filename=>{
  return {filename,size:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};
 });
 const totalBytes=artifacts.reduce((x,y)=>x+y.size,0);
+const d8Bytes=fs.existsSync('dist/toolchains/r8/8.13.17/r8-8.13.17.jar')?fs.readFileSync('dist/toolchains/r8/8.13.17/r8-8.13.17.jar'):null;
 const manifest={version:'2.2.20',java:17,entryPoint:'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',jars,totalBytes,artifacts,
-d8Version:'8.13.17',d8Jar:fs.existsSync('dist/toolchains/r8/8.13.17/r8-8.13.17.jar')?'r8-8.13.17.jar':null,
+d8Version:'8.13.17',d8Jar:d8Bytes?'r8-8.13.17.jar':null,
+d8Size:d8Bytes?.length??null,d8Sha256:d8Bytes?crypto.createHash('sha256').update(d8Bytes).digest('hex'):null,
 status:'experimental',apkKotlinSupported:false};
 fs.writeFileSync(path.join(root,'manifest.json'),JSON.stringify(manifest,null,2));
 console.log(jars.length+' Kotlin JARs; '+Math.round(totalBytes/1048576)+' MiB; D8 '+(manifest.d8Jar?'available':'unavailable'));
