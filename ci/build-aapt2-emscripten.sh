@@ -27,7 +27,8 @@ emcmake cmake -S "$SRC" -B "$OUT" -GNinja \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_C_FLAGS="-sUSE_ZLIB=1" \
   -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1 -DFMT_USE_CONSTEVAL=0"
-emmake cmake --build "$OUT" --target aapt2 --parallel 4
+# Continue unrelated Ninja compilation units to collect all wasm compatibility errors in one run.
+emmake cmake --build "$OUT" --target aapt2 --parallel 4 -- -k 0
 WASM_JS="$(find "$OUT" -type f -name aapt2.js -print -quit)"
 if [[ -z "$WASM_JS" || ! -s "$WASM_JS" || ! -s "${WASM_JS%.js}.wasm" ]]; then
   echo "::error::No actual AAPT2 WASM binary was produced"
