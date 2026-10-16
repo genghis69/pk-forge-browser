@@ -122,6 +122,30 @@ jobs:
         run: |
           node ci/build-android-manifest.mjs
           test -s dist/toolchains/android/manifest.json
+      - name: Valider D8 avec toutes les bibliothèques d'exécution Android
+        run: |
+          set -euo pipefail
+          mkdir -p ci/build/full-runtime-dex
+          node --input-type=module <<'NODE' > ci/build/runtime-jars.txt
+          import fs from 'node:fs';
+          import {planRuntimeJars} from './src/runtime-dex.mjs';
+          const index=JSON.parse(fs.readFileSync('dist/toolchains/android/manifest.json','utf8'));
+          const plan=planRuntimeJars(index.artifacts);
+          for(const jar of plan.dependencies) console.log('dist/toolchains/android/'+jar.relative);
+          NODE
+          mapfile -t RUNTIME_JARS < ci/build/runtime-jars.txt
+          test "${#RUNTIME_JARS[@]}" -gt 2
+          for jar in "${RUNTIME_JARS[@]}"; do test -s "$jar"; done
+          java -Xmx3g -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 \
+            --min-api 26 \
+            --lib dist/toolchains/android/sdk/36/android.jar \
+            --output ci/build/full-runtime-dex \
+            ci/build/android-proof.jar \
+            dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar \
+            "${RUNTIME_JARS[@]}"
+          test -s ci/build/full-runtime-dex/classes.dex
+          du -h ci/build/full-runtime-dex/*.dex
+          echo "D8 runtime : DEX généré avec Kotlin Stdlib, AndroidX et USB."
       - name: Installer le compilateur Protocol Buffers requis par Google Pack
         run: |
           sudo apt-get update
