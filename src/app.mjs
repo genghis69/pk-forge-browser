@@ -2,7 +2,8 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
-import {attachAndroidCompiler} from './android-compiler.mjs';
+import {attachAndroidCompiler,getRuntimeArtifacts} from './android-compiler.mjs';
+import {attachRealResourceCompiler} from './real-resources.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
@@ -165,3 +166,4 @@ document.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click'
 checkEngine();
 attachKotlinLab(()=>state);
 attachAndroidCompiler(()=>state);
+attachRealResourceCompiler(()=>state,()=>getRuntimeArtifacts());

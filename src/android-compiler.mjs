@@ -9,6 +9,7 @@ import {getKotlinRuntime} from './kotlin-lab.mjs';
 import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs';
 import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
 import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
+import {getResourceSession,linkedRCode,refreshApkButton} from './real-resources.mjs';
 const el=id=>document.getElementById(id);
 let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
@@ -81,9 +82,17 @@ async function buildGroup(project){
   if(file._data?.uncompressedSize>1024*1024)throw Error('Ressource trop volumineuse : '+path);
   resourceFiles.push({path,text:/\.xml$/i.test(path)?await file.async('string'):''});
  }
- const r=generateCompileOnlyR({namespace:profile.namespace,resourceFiles,sourceTexts:sources});
- log('R.kt TEMPORAIRE généré à partir du ZIP : '+r.symbolCount+' symboles de ressources, '+r.sourceRefs+' références.');
- log('Ce R ne contient PAS les ID finaux d’Android et ne peut pas servir à assembler un APK.');
+ const linkedSession=getResourceSession(project);
+ const r=linkedSession
+  ? {code:linkedRCode(profile.namespace,linkedSession.ids,sources),symbolCount:Object.keys(linkedSession.ids).length,sourceRefs:0}
+  : generateCompileOnlyR({namespace:profile.namespace,resourceFiles,sourceTexts:sources});
+ if(linkedSession){
+  log('R.kt RÉEL : '+r.symbolCount+' identifiants de la table resources.arsc WebAssembly.');
+  log('Cette compilation Kotlin utilisera les vrais IDs du même compilateur de ressources.');
+ }else{
+  log('R.kt TEMPORAIRE généré à partir du ZIP : '+r.symbolCount+' symboles de ressources, '+r.sourceRefs+' références.');
+  log('Ce R ne contient PAS les ID finaux d’Android et ne peut pas servir à assembler un APK.');
+ }
  const runtime=await getKotlinRuntime();
  log('Téléchargement des API Android 36 et dépendances Maven dans la RAM du navigateur...');
  const classpath=await mountAndroidClasspath(catalog);
@@ -127,7 +136,7 @@ async function buildGroup(project){
  if(count<profile.paths.length)throw Error('Seulement '+count+' classes JVM pour '+profile.paths.length+' sources. Vérification à poursuivre.');
  log('SUCCÈS : '+count+' classes JVM produites depuis les sources du ZIP ('+(blob.size/1024).toFixed(1)+' Kio).');
  jarBlob=blob;
- lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,classCount:count};
+ lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip};
  el('androidCompileDex').disabled=false;
  el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
@@ -238,6 +247,7 @@ async function buildRuntimeDex(){
  };
  zip.file('COMPILATION_DIAGNOSTIC.json',JSON.stringify(receipt,null,2));
  runtimeZip=await zip.generateAsync({type:'blob',compression:'STORE'});
+ refreshApkButton(lastCompilation?.sourceZip,{runtimeZip,linkedResourceSession:lastCompilation.linkedResourceSession});
  el('androidRuntimeDownload').disabled=false;
  log('SUCCÈS : '+dexFiles+' DEX, '+(bytes/1024/1024).toFixed(2)+' Mio, '+((performance.now()-started)/1000).toFixed(1)+' secondes.');
  status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). AAPT2 et assemblage APK restent manquants.',true);
@@ -246,6 +256,9 @@ function download(blob,name){
  if(!blob)throw Error('Aucun fichier généré.');
  const url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+export function getRuntimeArtifacts(){
+ return {runtimeZip,linkedResourceSession:lastCompilation?.linkedResourceSession||null,sourceZip:lastCompilation?.sourceZip||null};
 }
 export function attachAndroidCompiler(getProject){
  el('androidCompileDex').disabled=true;
@@ -272,6 +285,7 @@ export function attachAndroidCompiler(getProject){
  });
  el('androidCompileAll').addEventListener('click',async()=>{
   if(locked)return;locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
+  refreshApkButton(null,null);
   resetProgress();
   el('androidRuntimeDex').disabled=true;el('androidRuntimeDownload').disabled=true;
   el('androidCompileDex').disabled=true;

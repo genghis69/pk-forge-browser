@@ -22,6 +22,9 @@ jobs:
         run: |
           node --check src/app.mjs
           node --check src/android-compiler.mjs
+          node --check src/real-resources.mjs
+          node --test tests/real-resources.test.mjs
+          node --check ci/extend-pack.mjs
           node --test tests/decouple-d8.test.mjs
           node --check src/d8-threading.mjs
           node --test tests/d8-threading.test.mjs
@@ -171,6 +174,10 @@ jobs:
           git clone https://github.com/google/pack.git google-pack-source
           cd google-pack-source
           git checkout 7b60931e4058d892344ac57e49fcb582fd349b76
+      - name: Ajouter le compilateur de ressources et la signature APK incluant DEX
+        run: |
+          node ci/extend-pack.mjs
+          grep -q 'mod apkforge' google-pack-source/pack-wasm/src/lib.rs
       - name: Compiler le moteur Google Pack pour Chrome
         run: |
           mkdir -p "$GITHUB_WORKSPACE/dist/wasm/pack"
