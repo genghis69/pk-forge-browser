@@ -40,3 +40,15 @@ test('Bouton final contrôlé par la provenance exacte du ZIP et du R',()=>{
  assert.match(source,/export function refreshApkButton/);
  assert.match(source,/artifact\?\.linkedResourceSession===session/);
 });
+
+test('R.styleable réels depuis AAPT2 deviennent des IntArray Kotlin et des index constants',()=>{
+ const ids={
+  'styleable/ExampleView':[0x010100d4,0x7f010004],
+  'styleable/ExampleView_customAttr':1,
+  'attr/customAttr':0x7f010004
+ };
+ const kotlin=linkedRCode('dev.example.app',ids,['R.styleable.ExampleView','R.styleable.ExampleView_customAttr']);
+ assert.match(kotlin,/val ExampleView: IntArray = intArrayOf\(0x10100d4, 0x7f010004\)/);
+ assert.match(kotlin,/const val ExampleView_customAttr: Int = 1/);
+ assert.match(kotlin,/const val customAttr: Int = 0x7f010004/);
+});
