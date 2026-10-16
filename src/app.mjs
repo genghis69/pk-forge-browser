@@ -4,6 +4,7 @@ import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
 import {attachAndroidCompiler,getRuntimeArtifacts} from './android-compiler.mjs';
 import {attachRealResourceCompiler} from './real-resources.mjs';
+import {assessAapt2,aapt2Report} from './aapt2-diagnostics.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
@@ -167,3 +168,23 @@ checkEngine();
 attachKotlinLab(()=>state);
 attachAndroidCompiler(()=>state);
 attachRealResourceCompiler(()=>state,()=>getRuntimeArtifacts());
+
+const aapt2Btn=document.getElementById('aapt2Inspect');
+const aapt2Download=document.getElementById('aapt2Download');
+aapt2Btn?.addEventListener('click',()=>{
+ const out=document.getElementById('aapt2Result');
+ try{
+  const a=assessAapt2(state.analysis);
+  out.textContent='Ressources : '+a.resourceCount+'\nLimitations du compilateur Web : '+a.blockers.length+'\n\n'+
+    a.blockers.map(x=>'• '+x.path+'\n  '+x.reason).join('\n')+
+    '\n\nAPK installable : NON\nLa chaîne AAPT2 doit produire les vraies ressources avant recompilation Kotlin et signature.';
+  aapt2Download.disabled=false;
+ }catch(e){out.textContent=e.message;aapt2Download.disabled=true;}
+});
+aapt2Download?.addEventListener('click',()=>{
+ try{
+  const blob=new Blob([aapt2Report(state.analysis)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='rapport-aapt2-elm327.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);
+ }catch(e){document.getElementById('aapt2Result').textContent=e.message;}
+});

@@ -44,6 +44,12 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  <div id="realResourcesStatus" class="alert">Ressources non encore analysées. Certains thèmes, couleurs et layouts exigent AAPT2 et seront explicitement refusés.</div>
  <pre id="realResourcesLog">[PACK] Prêt. Aucune ressource utilisateur envoyée au serveur.</pre>
 </div>
+<div style="margin-top:24px;border:1px solid #47648a;border-radius:16px;padding:20px;background:#0c192c">
+<h2>Préparation AAPT2 pour le projet Android</h2>
+<p>Contrôle les ressources <code>src/main/res</code> et indique précisément lesquelles ne peuvent pas encore être liées dans le navigateur. Ni APK ni DEX préexistants ne sont utilisés.</p>
+<div class="buttons"><button class="btn alt" type="button" id="aapt2Inspect">Vérifier les ressources du projet</button><button class="btn alt" type="button" id="aapt2Download" disabled>⬇ Rapport de compatibilité JSON</button></div>
+<pre id="aapt2Result">En attente de l'analyse des ressources source.</pre>
+</div>
 <div id="androidCompilePanel" style="border:1px solid #437f7c;border-radius:16px;padding:20px;margin-top:24px;background:#0a1f29">
  <h2 style="font-size:21px">🛠 Compilation Kotlin Android (laboratoire, JAR puis DEX)</h2>
  <p><strong>ELM327 et projets compatibles :</strong> compile TOUS les fichiers <code>.kt</code> de <code>src/main</code> ensemble avec SDK Android 36, Kotlin 2.2.20, AndroidX Core et USB Serial. Les bibliothèques sont téléchargées dans Chrome et mises en mémoire pour CheerpJ. Aucun fichier du projet n’est envoyé à un serveur.</p>

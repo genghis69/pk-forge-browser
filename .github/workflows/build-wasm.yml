@@ -23,6 +23,8 @@ jobs:
           node --check src/app.mjs
           node --check src/android-compiler.mjs
           node --check src/real-resources.mjs
+          node --check src/aapt2-diagnostics.mjs
+          node --test tests/aapt2-diagnostics.test.mjs
           node --test tests/real-resources.test.mjs
           node --check ci/extend-pack.mjs
           node --test tests/decouple-d8.test.mjs
