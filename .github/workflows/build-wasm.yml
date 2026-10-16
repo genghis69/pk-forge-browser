@@ -20,6 +20,11 @@ jobs:
         run: |
           node --check src/app.mjs
           node --check src/crypto.mjs
+      - name: Installer le compilateur Protocol Buffers requis par Google Pack
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
       - name: Installer Rust et cible WASM
         uses: dtolnay/rust-toolchain@stable
         with:
