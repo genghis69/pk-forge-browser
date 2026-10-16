@@ -67,3 +67,16 @@ export function assertManifestProvidersPresent({manifest,packageName,definedClas
    '. L’APK se fermerait au démarrage (ClassNotFoundException).');
  return names;
 }
+
+export function dexMapDiagnostic(bytes){
+ if(!(bytes instanceof Uint8Array)||bytes.length<112)return {error:'En-tête DEX absent',size:bytes?.length??0};
+ const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),off=view.getUint32(0x34,true);
+ if(off<112||off+4>bytes.length)return {size:bytes.length,mapOff:off,error:'Offset map invalide'};
+ const count=view.getUint32(off,true),entries=[];
+ for(let i=0;i<Math.min(count,60);i++){
+  const at=off+4+i*12;if(at+12>bytes.length)break;
+  entries.push({index:i,type:'0x'+view.getUint16(at,true).toString(16).padStart(4,'0'),
+   unused:view.getUint16(at+2,true),size:view.getUint32(at+4,true),offset:view.getUint32(at+8,true)});
+ }
+ return {size:bytes.length,headerSize:view.getUint32(0x24,true),mapOff:off,count,entries};
+}

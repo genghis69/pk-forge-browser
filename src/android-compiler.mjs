@@ -10,7 +10,7 @@ import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs'
 import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
 import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
 import {getResourceSession,linkedRCode,refreshApkButton} from './real-resources.mjs';
-import {verifyDexIntegrity} from './dex-integrity.mjs';
+import {verifyDexIntegrity,dexMapDiagnostic} from './dex-integrity.mjs';
 const el=id=>document.getElementById(id);
 let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
@@ -258,6 +258,24 @@ async function buildRuntimeDex(){
    const count=view&&mapOff+4<=buffer.length?view.getUint32(mapOff,true):null;
    log('DIAGNOSTIC '+filename+' : '+buffer.length+' octets, map_off='+mapOff+
      ', sections='+String(count)+', D8 a produit un ZIP natif via CheerpJ.');
+   const details=dexMapDiagnostic(buffer);
+   log('MAP_LIST DEX : '+JSON.stringify(details.entries?.slice(0,25)??[]));
+   // Keep the exact corrupt output for offline analysis. No silent DEX mutations.
+   try{
+    const report=new JSZip();
+    report.file('classes.dex',buffer,{binary:true,compression:'STORE'});
+    report.file('dex-map-diagnostic.json',JSON.stringify({
+     generated:new Date().toISOString(),error:error.message,details,
+     mode:'CheerpJ D8 direct ZIP',d8Version:runtime.manifest.d8Version,
+     threadMode:selectedD8ThreadMode(),dependencyNames:plan.dependencies.map(x=>x.name)
+    },null,2));
+    const payload=await report.generateAsync({type:'blob',compression:'STORE'});
+    const url=URL.createObjectURL(payload);
+    const link=document.createElement('a');link.href=url;
+    link.download='apkforge-d8-diagnostic.zip';document.body.append(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    log('Rapport automatique téléchargé : apkforge-d8-diagnostic.zip');
+   }catch(reportError){log('Impossible de télécharger le rapport D8 : '+reportError.message);}
    throw Error('DEX '+filename+' invalide même en mode ZIP : '+error.message+
     '. APK bloqué avant signature.',{cause:error});
   }

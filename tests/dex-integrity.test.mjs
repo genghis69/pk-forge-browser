@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,webcrypto} from 'node:crypto';
-import {inspectDexMap,verifyDexIntegrity,declaredManifestProviderClasses,assertManifestProvidersPresent} from '../src/dex-integrity.mjs';
+import {inspectDexMap,dexMapDiagnostic,verifyDexIntegrity,declaredManifestProviderClasses,assertManifestProvidersPresent} from '../src/dex-integrity.mjs';
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 function dex(duplicate=false){
  const b=new Uint8Array(256),v=new DataView(b.buffer),mapOff=112;
@@ -41,4 +41,10 @@ test('ContentProvider AndroidX doit être réellement dans les DEX',()=>{
  assert.deepEqual(declaredManifestProviderClasses(manifest,'com.example'),['androidx.core.content.FileProvider']);
  assert.throws(()=>assertManifestProvidersPresent({manifest,packageName:'com.example',definedClasses:new Set()}),/FileProvider/);
  assert.deepEqual(assertManifestProvidersPresent({manifest,packageName:'com.example',definedClasses:new Set(['Landroidx/core/content/FileProvider;'])}),['androidx.core.content.FileProvider']);
+});
+
+test('Diagnostic map_list : les types dupliqués et les offsets sont conservés',()=>{
+ const entries=dexMapDiagnostic(dex(true));
+ assert.equal(entries.count,3);
+ assert.deepEqual(entries.entries.map(e=>e.type),['0x0000','0x1000','0x0000']);
 });
