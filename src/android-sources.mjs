@@ -1,7 +1,7 @@
 /** Only app/src/main Kotlin sources from user ZIP. Never use build/, APK or DEX. */
 const valid=n=>/^[A-Za-z_][A-Za-z0-9_]*$/.test(n);
 export function sourcePaths(project){
- const files=project?.analysis?.sourceSamples??[];
+ const files=project?.analysis?.kotlinPaths??project?.analysis?.sourceSamples??[];
  const selected=files.filter(p=>/\/src\/main\/(?:java|kotlin)\/.*\.kt$/.test(p)
   && !/(?:^|\/)(?:build|\.gradle|\.git)\//.test(p));
  if(selected.length>250)throw Error('More than 250 Kotlin source files.');

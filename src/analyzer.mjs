@@ -52,6 +52,8 @@ export function projectInfo(paths,texts={}) {
     targetSdk:find(appGradle,/\btargetSdk\s*(?:=|\()\s*(\d+)/),
     minSdk:find(appGradle,/\bminSdk\s*(?:=|\()\s*(\d+)/),
     java:javaFiles.length,kotlin:kotlinFiles.length,
+    kotlinPaths:kotlinFiles,javaPaths:javaFiles,
+    manifestHasCodeFalse:hasCodeFalse,
     resources:resourcePaths.length, files:paths.length,sourceFiles:sourcePaths.length,
     ignoredGenerated:paths.length-sourcePaths.length,
     nativeLibs,

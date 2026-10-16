@@ -1,6 +1,7 @@
 import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
+import {classifyAndroidProject} from './project-support.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
 import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileRuntimeDexForApk,getLastD8Diagnostic} from './android-compiler.mjs';
 import {attachRealResourceCompiler,prepareRealResources,assembleRealApk} from './real-resources.mjs';
@@ -29,10 +30,13 @@ async function startAutomaticBuild(){
  if($('autoBuildLog'))$('autoBuildLog').textContent='[APK FORGE AUTO] Démarrage de la compilation automatique.';
  show(2);
  audit();
+ const selection=classifyAndroidProject(state.analysis);
+ autoLog('ANALYSE : '+selection.description);
+ autoLog('PROFIL : '+selection.reason);
  const compatibility=$('compatibility');
  if(compatibility){
-  compatibility.className='alert good';
-  compatibility.textContent='Compilation automatique active : AAPT2 → Kotlin → D8 → APK signé. Suis l’avancement ci-dessous ; les options techniques sont facultatives.';
+  compatibility.className='alert'+(selection.mode==='unsupported'?'':' good');
+  compatibility.textContent=selection.reason;
  }
  autoStatus('Préparation du projet Android dans le navigateur...');
  const onPhase=({phase,total,name,status,error})=>{
@@ -42,10 +46,23 @@ async function startAutomaticBuild(){
   if(status==='error')autoLog('ÉCHEC étape '+phase+'/'+total+' : '+name+' • '+String(error?.message||error));
  };
  try{
-  if(state.analysis.kotlin<1){
-   if(!state.analysis.compatible)throw Error('Ce projet ne contient pas de sources Kotlin compatibles avec le compilateur automatique.');
-   autoStatus('Compilation automatique de l’APK sans code...');
-   await compile();
+  if(selection.mode==='unsupported')throw Error(selection.reason);
+  if(selection.mode==='resources'){
+   const title='Google Pack : ressources Android et signature APK sans code';
+   onPhase({phase:1,total:1,name:title,status:'running'});
+   try{
+    autoStatus('Compilation de l’application sans code...');
+    await compile({throwOnError:true});
+    if(state.zip!==snapshot)throw Error('ZIP changé pendant la compilation : APK non associé au projet.');
+    if(!$('download').href||!state.objectUrl)throw Error('Aucun APK créé.');
+    if(progress)progress.value=4;
+    onPhase({phase:1,total:1,name:title,status:'done'});
+    autoStatus('APK sans code compilé et signé. Téléchargement prêt.',true);
+    $('download').click();
+   }catch(error){
+    onPhase({phase:1,total:1,name:title,status:'error',error});
+    throw error;
+   }
    return;
   }
   const apk=await runAutomaticApkBuild({
@@ -135,7 +152,10 @@ async function checkEngine(){
   }catch(e){$('engine').textContent='○ Moteur WASM indisponible';$('engine').dataset.ready='no';log('Moteur indisponible : '+e.message);return false;}
 }
 function diagnostic(a){
- const lines=[];
+ const selected=classifyAndroidProject(a);
+ const lines=[selected.reason,'Profil : '+selected.description];
+ if(selected.mode==='kotlin')return lines;
+ if(selected.mode==='resources')return lines;
  if(!a.manifestPath)lines.push('• AndroidManifest.xml : absent ou non reconnu.');
  if(a.kotlin)lines.push('• '+a.kotlin+' fichier(s) Kotlin : compilateur Kotlin/JVM nécessaire, NON INTÉGRÉ.');
  if(a.kotlinPlugin!=='Non précisé')lines.push('• Kotlin Plugin '+a.kotlinPlugin+' (cible JVM '+a.kotlinJvmTarget+') : JVM et compilateur Kotlin requis.');
@@ -160,8 +180,10 @@ function downloadReport(){
  const a=state.analysis;if(!a)return;
  const report={
   createdAt:new Date().toISOString(),sourceFile:state.file?.name||null,
-  engine:'Google Pack WebAssembly',engineSupports:'APK de ressources sans code Java/Kotlin',
-  buildPossibleWithCurrentEngine:a.compatible,project:a,
+  engine:'APK Forge Browser / AAPT2 / Kotlin / D8 / Google Pack',
+  engineSupports:'Kotlin 2.2.20 / SDK 36 pour le profil existant, ou ressources sans code',
+  buildPossibleWithCurrentEngine:classifyAndroidProject(a).mode!=='unsupported',
+  buildMode:classifyAndroidProject(a).mode,project:a,
   diagnostics:a.compatible?['Projet sans code détecté; compilation à valider.']:diagnostic(a),
   requiredComponents:a.java||a.kotlin?
    ['Compilateur Java/Kotlin dans le navigateur','Android API android.jar','D8/R8 compatible navigateur','Gestion des dépendances','Assemblage APK avec classes.dex']:[],
@@ -204,7 +226,7 @@ async function prepare(){
     'Moteur opérationnel. Compilation locale possible pour ce type de ressources.';
   $('compile').disabled=!(ready&&a.compatible);
 }
-async function compile(){
+async function compile({throwOnError=false}={}){
  try{
   $('compile').disabled=true;log('Compilation locale des ressources...');
   const a=state.analysis,prefix=a.manifestPath.replace(/(?:app\/src\/main\/)?AndroidManifest\.xml$/,'');
@@ -234,13 +256,15 @@ async function compile(){
   $('resultMeta').textContent='Taille : '+(apk.length/1024).toFixed(1)+' Kio · '+a.packageName+' · '+a.version;
   log('Terminé. APK généré : '+apk.length+' octets.');
   show(3);
- }catch(e){log('Erreur : '+e.message);$('compatibility').textContent='Échec de compilation : '+e.message;$('compatibility').className='alert';}
+  return new Blob([apk],{type:'application/vnd.android.package-archive'});
+ }catch(e){log('Erreur : '+e.message);$('compatibility').textContent='Échec de compilation : '+e.message;$('compatibility').className='alert';if(throwOnError)throw e;}
  finally{$('compile').disabled=!(state.analysis?.compatible&&!!state.engine);}
 }
 $('zip').addEventListener('change',async e=>{if(await analyze(e.target.files?.[0]))await startAutomaticBuild();});
 $('sample').addEventListener('click',loadSample);
 $('sample2').addEventListener('click',loadSample);
 $('report').addEventListener('click',downloadReport);
+$('autoProjectReport').addEventListener('click',downloadReport);
 $('drop').addEventListener('click',()=>$('zip').click());
 for(const event of ['dragover','dragenter'])$('drop').addEventListener(event,e=>{e.preventDefault();$('drop').classList.add('over');});
 $('drop').addEventListener('dragleave',e=>{e.preventDefault();$('drop').classList.remove('over');});

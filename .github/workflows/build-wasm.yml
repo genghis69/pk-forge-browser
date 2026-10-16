@@ -59,6 +59,8 @@ jobs:
           node --check src/crypto.mjs
           node --check src/sample.mjs
           node --check src/analyzer.mjs
+          node --check src/project-support.mjs
+          node --test tests/project-support.test.mjs
           node --check src/kotlin-lab.mjs
           node --check src/compiler-results.mjs
           node --check src/jvm-artifacts.mjs

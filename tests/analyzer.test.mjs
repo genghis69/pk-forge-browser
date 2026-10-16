@@ -48,3 +48,13 @@ test('un fichier Kotlin dans src/main reste une vraie source',()=>{
  assert.equal(isGeneratedPath('test/app/src/main/MainActivity.kt'),false);
  assert.equal(isGeneratedPath('test/app/build/tmp/kotlin-classes/debug/MainActivity.class'),true);
 });
+
+test('l’analyse complète retient toutes les sources Kotlin même au-delà des 30 aperçus',()=>{
+ const root='MultipleModule/';
+ const paths=[root+'app/src/main/AndroidManifest.xml',root+'app/build.gradle.kts',
+  ...Array.from({length:44},(_,i)=>root+'app/src/main/kotlin/org/test/File'+i+'.kt')];
+ const r=projectInfo(paths,{[paths[0]]:'<manifest/>'});
+ assert.equal(r.kotlin,44);
+ assert.equal(r.kotlinPaths.length,44);
+ assert.equal(r.sourceSamples.length,30);
+});
