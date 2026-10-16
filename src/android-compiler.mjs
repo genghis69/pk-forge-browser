@@ -6,8 +6,9 @@ import {mountJar,virtualJarPath} from './jvm-artifacts.mjs';
 import {toolchainUrl} from './toolchain-paths.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
 import {getKotlinRuntime} from './kotlin-lab.mjs';
+import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs';
 const el=id=>document.getElementById(id);
-let locked=false,jarBlob=null,dexBlob=null;
+let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
 const log=s=>{const n=el('androidCompileLog');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const status=(s,ok=false)=>{const n=el('androidCompileStatus');n.textContent=s;n.className='alert'+(ok?' good':'');};
@@ -85,6 +86,8 @@ async function buildGroup(project){
  if(count<profile.paths.length)throw Error('Seulement '+count+' classes JVM pour '+profile.paths.length+' sources. Vérification à poursuivre.');
  log('SUCCÈS : '+count+' classes JVM produites depuis les sources du ZIP ('+(blob.size/1024).toFixed(1)+' Kio).');
  jarBlob=blob;
+ lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,classCount:count};
+ el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
  status(profile.paths.length+' sources Kotlin compilées en '+count+' classes JVM. Assemblage APK toujours indisponible.',true);
  if(!runtime.manifest.d8Jar)throw Error('D8 n’est pas installé. Les classes JVM restent téléchargeables.');
@@ -108,14 +111,83 @@ async function buildGroup(project){
  log('SUCCÈS : classes.dex '+(dexBlob.size/1024).toFixed(1)+' Kio, généré dans Chrome.');
  status('Kotlin '+d.sourceCount+' fichiers → '+d.classCount+' classes JVM → DEX créé. APK non assemblé.',true);
 }
+/**
+ * D8 runtime pass. Includes compiled Kotlin sources, Kotlin stdlib 2.2.20 and
+ * AndroidX / USB Serial runtime JARs (not just compilation classpath references).
+ * Produces a ZIP containing classes.dex/classes2.dex..., never an APK.
+ */
+async function buildRuntimeDex(){
+ if(!lastCompilation)throw Error('Compile les sources Kotlin avant de générer le DEX avec les bibliothèques.');
+ const {jarPath,jarRoot,classpath,runtime,sourceCount,classCount}=lastCompilation;
+ const plan=planRuntimeJars(classpath);
+ checkRuntimeInputs(plan,jarBlob);
+ if(!runtime.manifest?.jars?.includes(plan.stdlib))throw Error('Kotlin stdlib '+plan.stdlib+' non chargée.');
+ log('D8 runtime : '+plan.dependencies.length+' dépendances Android plus Kotlin '+runtime.manifest.version+'.');
+ for(const skipped of plan.skipped)log('Exclusion du doublon : '+skipped.name+' ('+skipped.reason+').');
+ const dexJar=await mountJar({
+   relative:'r8/'+runtime.manifest.d8Version+'/'+runtime.manifest.d8Jar,
+   filename:runtime.manifest.d8Jar,expectedSize:runtime.manifest.d8Size,
+   sha256:runtime.manifest.d8Sha256,moduleUrl,fetchFn:fetch,
+   addFn:cheerpOSAddStringFile,progress:log
+ });
+ const path='/files/apkforge-kotlin/elm327-runtime-dex';
+ const files=await runtime.library.java.nio.file.Files;
+ const Paths=await runtime.library.java.nio.file.Paths;
+ await files.createDirectories(await Paths.get(path));
+ const argv=['--min-api','26','--lib',jarRoot.path,'--output',path,
+  jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
+ log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
+ log('Traitement complet des bibliothèques. Cette étape peut prendre plusieurs minutes.');
+ const started=performance.now();
+ const code=await cheerpjRunMain('com.android.tools.r8.D8',dexJar,...argv);
+ if(code!==0)throw Error('D8 runtime a échoué (code '+code+'). Regarde la console F12 pour les bibliothèques incompatibles.');
+ if(!window.JSZip)throw Error('JSZip indisponible pour regrouper les sorties DEX.');
+ const zip=new JSZip();
+ let dexFiles=0,bytes=0;
+ for(let i=1;i<=40;i++){
+  const filename=dexFilename(i),blob=await cjFileBlob(path+'/'+filename);
+  if(!blob){if(i===1)throw Error('D8 a terminé sans produire de classes.dex.');break;}
+  await validateCompilerArtifact(blob,'dex');
+  zip.file(filename,blob,{compression:'STORE'});
+  dexFiles++;bytes+=blob.size;
+  log('Vérifié : '+filename+' ('+(blob.size/1024).toFixed(1)+' Kio).');
+ }
+ const receipt={
+  kind:'ANDROID_RUNTIME_DEX_DIAGNOSTIC',
+  sourcesKotlin:sourceCount,
+  classFilesJVM:classCount,
+  runtimeDependencies:plan.dependencies.map(d=>d.name),
+  excluded:plan.skipped,
+  containsAppAndDependencies:true,
+  resourceIdsLinked:false,
+  aapt2Completed:false,
+  androidManifestCompiled:false,
+  apkInstallable:false,
+  warning:'Fichiers DEX de diagnostic issus des sources Kotlin, R provisoire, sans APK signé.'
+ };
+ zip.file('COMPILATION_DIAGNOSTIC.json',JSON.stringify(receipt,null,2));
+ runtimeZip=await zip.generateAsync({type:'blob',compression:'STORE'});
+ el('androidRuntimeDownload').disabled=false;
+ log('SUCCÈS : '+dexFiles+' DEX, '+(bytes/1024/1024).toFixed(2)+' Mio, '+((performance.now()-started)/1000).toFixed(1)+' secondes.');
+ status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). AAPT2 et assemblage APK restent manquants.',true);
+}
 function download(blob,name){
  if(!blob)throw Error('Aucun fichier généré.');
  const url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 export function attachAndroidCompiler(getProject){
+ el('androidRuntimeDex').addEventListener('click',async()=>{
+  if(locked)return;
+  locked=true;el('androidRuntimeDex').disabled=true;el('androidCompileAll').disabled=true;
+  runtimeZip=null;el('androidRuntimeDownload').disabled=true;
+  try{await buildRuntimeDex();}
+  catch(e){log('ERREUR RUNTIME : '+e.message);status('Fusion runtime interrompue : '+e.message);console.error('APK Forge runtime D8',e);}
+  finally{locked=false;el('androidRuntimeDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
+ });
  el('androidCompileAll').addEventListener('click',async()=>{
-  if(locked)return;locked=true;jarBlob=null;dexBlob=null;
+  if(locked)return;locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
+  el('androidRuntimeDex').disabled=true;el('androidRuntimeDownload').disabled=true;
   el('androidCompileAll').disabled=true;
   el('androidJarDownload').disabled=true;el('androidDexDownload').disabled=true;
   status('Chargement des outils et compilation...');el('androidCompileLog').textContent='[APK FORGE ANDROID] Démarrage.';
@@ -125,4 +197,5 @@ export function attachAndroidCompiler(getProject){
  });
  el('androidJarDownload').addEventListener('click',()=>download(jarBlob,'elm327-classes-diagnostic.jar'));
  el('androidDexDownload').addEventListener('click',()=>download(dexBlob,'elm327-classes-diagnostic.dex'));
+ el('androidRuntimeDownload').addEventListener('click',()=>download(runtimeZip,'elm327-runtime-dex-diagnostic.zip'));
 }

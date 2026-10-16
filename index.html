@@ -42,6 +42,16 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
   <button id="androidJarDownload" class="btn alt" type="button" disabled>⬇ Classes JVM (.jar)</button>
   <button id="androidDexDownload" class="btn alt" type="button" disabled>⬇ DEX de diagnostic</button>
  </div>
+ <div style="margin-top:16px;border:1px solid #355678;border-radius:12px;padding:14px;background:#0d2231">
+ <strong style="font-size:15px">Étape suivante : DEX avec bibliothèques d’exécution</strong>
+ <p style="font-size:13px">Intégrer le code ELM327, Kotlin Stdlib, AndroidX, USB Serial et leurs dépendances dans D8. Un fichier ZIP contenant le ou les DEX sera disponible. <strong>Attention :</strong> AAPT2, les vrais ID des ressources et la signature APK ne sont pas encore disponibles.</p>
+ <div class="buttons">
+  <button id="androidRuntimeDex" class="btn" type="button" disabled>Intégrer les bibliothèques → DEX</button>
+  <button id="androidRuntimeDownload" class="btn alt" type="button" disabled>⬇ ZIP des DEX d’exécution</button>
+ </div>
+ </div>
+ <div style="display:none">
+ </div>
  <div id="androidCompileStatus" class="alert">En attente. Importe ton ZIP ELM327, puis lance la compilation groupée.</div>
  <pre id="androidCompileLog">[APK FORGE ANDROID] Aucune source compilée.</pre>
 </div>
