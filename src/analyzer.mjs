@@ -36,8 +36,8 @@ export function projectInfo(paths,texts={}) {
   // Do not claim support for catalog aliases or computed coordinates.
   const dependencies=[...new Set([...appGradle.matchAll(/\b(?:implementation|api|compileOnly|runtimeOnly|kapt|ksp|debugImplementation)\s*(?:\(\s*)?["']([^"']+)["']/g)].map(m=>m[1]))];
   const unresolvedDependencies=[...appGradle.matchAll(/\b(?:implementation|api|compileOnly|runtimeOnly|kapt|ksp|debugImplementation)\s*(?:\(\s*)?(libs\.[\w.]+|project\s*\([^)]*\)|files\s*\([^)]*\)|fileTree\s*\([^)]*\))/g)].map(m=>m[1]);
-  const gradleString=key=>find(appGradle,new RegExp('\\b'+key+'\\s*(?:=|\\(\\s*|\\s+)["\\x27]([^"\\x27]+)'));
-  const gradleNumber=key=>find(appGradle,new RegExp('\\b'+key+'\\s*(?:=|\\(\\s*|\\s+)([0-9]+)'));
+  const gradleString=key=>find(appGradle,new RegExp('\\b'+key+'\\s*(?:=|\\(\\s*|\\s+)\\s*["\\x27]([^"\\x27]+)'));
+  const gradleNumber=key=>find(appGradle,new RegExp('\\b'+key+'\\s*(?:=|\\(\\s*|\\s+)\\s*([0-9]+)'));
   const javaPlugin=/\b(?:id\s*(?:\(|\s+)|apply\s+plugin\s*:\s*)["']com\.android\.application["']/.test(appGradle);
 
   const packageName=gradleString('applicationId');

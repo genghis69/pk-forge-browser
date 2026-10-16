@@ -4,10 +4,12 @@ import {classifyAndroidProject} from '../src/project-support.mjs';
 const base={manifestPath:'app/src/main/AndroidManifest.xml',kotlin:0,java:0,
  resources:4,aarFiles:0,nativeLibs:0,manifestHasCodeFalse:false,compatible:false,
  kotlinPlugin:'Non précisé',sdk:'Non précisé'};
-test('Un projet Java seul n’est pas confondu avec un projet sans code',()=>{
- const v=classifyAndroidProject({...base,java:12});
- assert.equal(v.mode,'unsupported');assert.match(v.reason,/12 fichier/);
- assert.match(v.reason,/compilateur Java/);
+test('Un projet Java seul utilise le profil Java expérimental',()=>{
+ const v=classifyAndroidProject({...base,java:2,javaPaths:[
+  'app/src/main/java/a/MainActivity.java','app/src/main/java/a/Util.java'
+ ],namespace:'a.example',sdk:'35',minSdk:'23'});
+ assert.equal(v.mode,'java');
+ assert.match(v.reason,/ECJ Java/);
 });
 test('Un projet Java/Kotlin mixte est expliqué précisément',()=>{
  const v=classifyAndroidProject({...base,java:2,kotlin:3});
