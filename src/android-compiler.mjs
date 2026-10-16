@@ -8,11 +8,17 @@ import {validateCompilerArtifact} from './compiler-results.mjs';
 import {getKotlinRuntime} from './kotlin-lab.mjs';
 import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs';
 import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
+import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
 const el=id=>document.getElementById(id);
 let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
 const log=s=>{const n=el('androidCompileLog');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const status=(s,ok=false)=>{const n=el('androidCompileStatus');n.textContent=s;n.className='alert'+(ok?' good':'');};
+function selectedD8ThreadMode(){
+ const select=el('androidD8Threads');
+ return select?.value || '1';
+}
+
 /** Observable execution: time is real, internal Kotlin progress is unknown. */
 async function observedJavaExecution(label,callback){
  const phase=el('androidCompilePhase'),reload=el('androidReloadCompiler');
@@ -144,7 +150,7 @@ export function diagnosticD8Arguments({androidJar,outputDirectory,classesJar,min
  if(paths.some(p=>typeof p!=='string'||!p.startsWith('/files/')&&!p.startsWith('/str/')))
   throw Error('Les chemins de compilation doivent rester locaux au navigateur.');
  if(!Number.isSafeInteger(minSdk)||minSdk<21||minSdk>36)throw Error('minSdk Android invalide.');
- return ['--min-api',String(minSdk),'--lib',androidJar,'--output',outputDirectory,classesJar];
+ return ['--min-api',String(minSdk),...d8ThreadFlags(selectedD8ThreadMode()),'--lib',androidJar,'--output',outputDirectory,classesJar];
 }
 async function compileStandaloneDex(){
  if(!lastCompilation||!jarBlob)
@@ -166,6 +172,7 @@ async function compileStandaloneDex(){
  log('Dossier D8 créé : '+folder);
  const argv=diagnosticD8Arguments({androidJar:jarRoot.path,outputDirectory:folder,classesJar:jarPath});
  log('D8 '+runtime.manifest.d8Version+' : lancement explicite de la conversion des '+classCount+' classes JVM.');
+ log('Réglage D8 : '+d8ThreadDescription(selectedD8ThreadMode())+'.');
  log('Le chronomètre indiquera la durée réelle ; aucun pourcentage fictif.');
  const code=await observedJavaExecution('D8 des classes Kotlin',()=>cheerpjRunMain('com.android.tools.r8.D8',jar,...argv));
  if(code!==0)throw Error('D8 a renvoyé le code '+code+'. Vérifie F12 pour les détails.');
@@ -197,9 +204,10 @@ async function buildRuntimeDex(){
  const files=await runtime.library.java.nio.file.Files;
  const Paths=await runtime.library.java.nio.file.Paths;
  await files.createDirectories(await Paths.get(path));
- const argv=['--min-api','26','--lib',jarRoot.path,'--output',path,
+ const argv=['--min-api','26',...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',path,
   jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
  log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
+ log('Réglage D8 : '+d8ThreadDescription(selectedD8ThreadMode())+'.');
  log('Traitement complet des bibliothèques. Cette étape peut prendre plusieurs minutes.');
  const started=performance.now();
  const code=await observedJavaExecution('Fusion D8 des dépendances Android',()=>cheerpjRunMain('com.android.tools.r8.D8',dexJar,...argv));

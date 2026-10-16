@@ -46,8 +46,15 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  </div>
  <div style="margin-top:16px;border:1px solid #355678;border-radius:12px;padding:14px;background:#0d2231">
  <strong style="font-size:15px">Étape suivante : DEX avec bibliothèques d’exécution</strong>
+ <p style="font-size:13px">Pour réduire les risques de contention des threads Java sous CheerpJ, teste le réglage <strong>1 thread</strong>. Ce n’est pas une garantie de rapidité. L'opération sur 21 JAR peut prendre plusieurs minutes ; les résultats du JAR Kotlin restent téléchargeables.</p>
  <p style="font-size:13px">Intégrer le code ELM327, Kotlin Stdlib, AndroidX, USB Serial et leurs dépendances dans D8. Un fichier ZIP contenant le ou les DEX sera disponible. <strong>Attention :</strong> AAPT2, les vrais ID des ressources et la signature APK ne sont pas encore disponibles.</p>
  <div class="buttons">
+  <label for="androidD8Threads" style="font-size:13px;color:#c4d9e8;align-self:center">Threads Java D8 :</label>
+  <select id="androidD8Threads" style="background:#0b1728;color:#d9edff;border:1px solid #3c5675;padding:10px;border-radius:8px">
+    <option value="1" selected>1 (essai CheerpJ)</option>
+    <option value="2">2 (comparaison)</option>
+    <option value="auto">Auto (ancien comportement)</option>
+  </select>
   <button id="androidRuntimeDex" class="btn" type="button" disabled>Intégrer les bibliothèques → DEX</button>
   <button id="androidRuntimeDownload" class="btn alt" type="button" disabled>⬇ ZIP des DEX d’exécution</button>
  </div>

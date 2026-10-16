@@ -14,6 +14,12 @@ test('Avertir sans prétendre connaître un pourcentage de compilation',()=>{
  assert.equal(waitDiagnosis(260000).severity,'stalled');
  assert.ok(!waitDiagnosis(260000).message.includes('%'));
 });
+test('D8 possède son diagnostic distinct de Kotlin',()=>{
+ assert.match(waitDiagnosis(180000,'Fusion D8 des dépendances Android').message,/D8/);
+ assert.doesNotMatch(waitDiagnosis(180000,'Fusion D8 des dépendances Android').message,/Kotlin/);
+ assert.equal(waitDiagnosis(300000,'Fusion D8 des dépendances Android').severity,'warning');
+ assert.equal(waitDiagnosis(600000,'Fusion D8 des dépendances Android').severity,'stalled');
+});
 test('Chronomètre nettoyé en fin de compilation',()=>{
  let now=0,pulse=null,cleaned=false;const received=[],alerts=[];
  const obs=createExecutionObserver({

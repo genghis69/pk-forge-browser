@@ -23,6 +23,8 @@ jobs:
           node --check src/app.mjs
           node --check src/android-compiler.mjs
           node --test tests/decouple-d8.test.mjs
+          node --check src/d8-threading.mjs
+          node --test tests/d8-threading.test.mjs
           node --check src/compilation-observer.mjs
           node --test tests/compilation-observer.test.mjs
           node --check src/runtime-dex.mjs
@@ -141,6 +143,7 @@ jobs:
           test "${#RUNTIME_JARS[@]}" -gt 2
           for jar in "${RUNTIME_JARS[@]}"; do test -s "$jar"; done
           java -Xmx3g -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 \
+            --thread-count 1 \
             --min-api 26 \
             --lib dist/toolchains/android/sdk/36/android.jar \
             --output ci/build/full-runtime-dex \
