@@ -9,6 +9,7 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {isGeneratedPath} from './analyzer.mjs';
 import {compileAapt2Wasm} from './aapt2-wasm.mjs';
 import {inspectSignedApk} from './apk-structure.mjs';
+import {assertApkLaunchClasses} from './apk-launch-check.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -128,7 +129,7 @@ export async function prepareRealResources(project){
   const namespace=data.namespace!=='Non précisé'?data.namespace:data.packageName;
   linkedRCode(namespace,aapt2.ids,sourceTexts);
   session={zip:project.zip,project,ids:aapt2.ids,linkedApkBase64:to64(aapt2.apk),
-   signingPem:await developmentPem(),sourceTexts,namespace,engine:'aapt2-wasm'};
+   signingPem:await developmentPem(),sourceTexts,namespace,normalizedManifest:manifest,engine:'aapt2-wasm'};
   refreshApkButton(project.zip,null);
   info('AAPT2 WASM : compile/link exécutés, '+Object.keys(aapt2.ids).length+' IDs issus du R.txt réel.');
   info('Recompiler Kotlin avec ces IDs puis lancer D8 avant signature.');
@@ -171,7 +172,7 @@ export async function prepareRealResources(project){
   const bytes=await file.async('uint8array');
   if(bytes[0]!==magic||bytes[1]!==0)throw Error('En-tête binaire invalide pour '+name);
  }
- session={zip:project.zip,project,ids,input,sourceTexts,namespace:data.namespace!=='Non précisé'?data.namespace:data.packageName,engine:'google-pack'};
+ session={zip:project.zip,project,ids,input,normalizedManifest:manifest,sourceTexts,namespace:data.namespace!=='Non précisé'?data.namespace:data.packageName,engine:'google-pack'};
  refreshApkButton(project.zip,null);
  info('Ressources compilées : manifeste binaire, resources.arsc, '+Object.keys(ids).length+' identifiants Android réels.');
  info('Il faut maintenant RECOMPILER Kotlin avec ces identifiants avant la fusion D8.');
@@ -187,15 +188,22 @@ export async function assembleRealApk(project,artifact){
   const n=x=>x==='classes.dex'?1:Number(x.replace(/\D/g,''));return n(a)-n(b);
  });
  if(names.length===0)throw Error('Aucun DEX runtime valide.');
- const payload=[];
+ const payload=[],dexBuffers=[];
  for(let i=0;i<names.length;i++){
   const expected=i===0?'classes.dex':'classes'+(i+1)+'.dex';
   if(names[i]!==expected)throw Error('Nommage DEX non contigu : '+names[i]);
   const bytes=await zip.file(names[i]).async('uint8array');
   if(bytes.length<8||bytes[0]!==100||bytes[1]!==101||bytes[2]!==120||bytes[3]!==10)
    throw Error('DEX invalide : '+names[i]);
+  dexBuffers.push(bytes);
   payload.push(to64(bytes));
  }
+ const launchCheck=assertApkLaunchClasses({
+  manifest:prepared.normalizedManifest,
+  packageName:project.analysis.packageName,
+  dexBuffers
+ });
+ info('Vérification du démarrage : '+launchCheck.checked.join(', ')+' présentes dans les DEX ('+launchCheck.classCount+' classes).');
  info('Assemblage ZIP, alignement et signature v2/v3 APRÈS insertion de '+payload.length+' DEX...');
  const wasm=await engine();
  const signed=prepared.engine==='aapt2-wasm'

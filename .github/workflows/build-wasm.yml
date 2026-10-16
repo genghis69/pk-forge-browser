@@ -34,6 +34,8 @@ jobs:
           node --test tests/aapt2-wasm.test.mjs
           node --check src/auto-build.mjs
           node --test tests/auto-build.test.mjs
+          node --check src/apk-launch-check.mjs
+          node --test tests/apk-launch-check.test.mjs
           node --check src/apk-structure.mjs
           node --test tests/apk-structure.test.mjs
           node --check ci/test-aapt2-link.mjs
