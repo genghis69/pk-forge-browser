@@ -335,5 +335,19 @@ contents = (
 strerror_source.write_text(contents)
 print("Ported Android libbase errno-to-message conversion for wasm32.")
 
+# Android tracing is a profiler, not part of AAPT2 resource semantics.
+# Browser builds have no Android tracing daemon, so explicitly disable it.
+tracing_file = source / "ci-aapt2-no-android-tracing.c"
+tracing_file.write_text("""
+#include <stdint.h>
+uint64_t atrace_get_enabled_tags(void) { return UINT64_C(0); }
+void atrace_begin_body(const char* name) { (void)name; }
+void atrace_end_body(void) {}
+""")
+text += """
+if(EMSCRIPTEN)
+    target_sources(aapt2 PRIVATE "${CMAKE_SOURCE_DIR}/ci-aapt2-no-android-tracing.c")
+endif()
+"""
 cmake.write_text(text)
 print("Patched isolated AOSP AAPT2 sources for Emscripten, including Bionic configuration header.")
