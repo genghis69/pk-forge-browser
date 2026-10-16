@@ -195,8 +195,8 @@ jobs:
             -17 -proc:none \
             -classpath dist/toolchains/android/sdk/36/android.jar \
             -d ci/build/java-ecj-proof ci/samples/BrowserActivity.java
-          test -s ci/build/java-ecj-proof/dev/apkforge/browser/proof/JavaActivity.class
-          javap -classpath ci/build/java-ecj-proof -verbose dev.apkforge.browser.proof.JavaActivity | grep 'major version: 61'
+          test -s ci/build/java-ecj-proof/dev/apkforge/browser/proof/BrowserActivity.class
+          javap -classpath ci/build/java-ecj-proof -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
