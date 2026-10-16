@@ -28,12 +28,21 @@ if "set(CMAKE_CXX_STANDARD 20)" not in text:
 text = text.replace(
     "set(CMAKE_CXX_STANDARD 20)",
     "if(EMSCRIPTEN)\n"
-    "    set(CMAKE_CXX_STANDARD 17)\n"
+    "    set(CMAKE_CXX_STANDARD 23)\n"
     "else()\n"
     "    set(CMAKE_CXX_STANDARD 20)\n"
     "endif()",
     1,
 )
+# AAPT2 needs C++20 APIs; Emscripten's <stdatomic.h> also requires C++23.
+# fmt 10.2.0 itself works under C++17 on the pinned Clang toolchain.
+fmt_marker = "add_subdirectory(submodules/fmtlib EXCLUDE_FROM_ALL)"
+if fmt_marker not in text:
+    raise RuntimeError("Upstream fmt build declaration changed")
+text = text.replace(fmt_marker, """add_subdirectory(submodules/fmtlib EXCLUDE_FROM_ALL)
+if(EMSCRIPTEN)
+    set_property(TARGET fmt PROPERTY CXX_STANDARD 17)
+endif()""", 1)
 top.write_text(text)
 
 # The sys/cdefs.h header belongs to Android Bionic, not Emscripten.
@@ -45,6 +54,10 @@ android_header_dirs = (
     source / "submodules/core/libutils/include",
     source / "submodules/libbase/include",
     source / "submodules/base/libs/androidfw/include",
+    source / "submodules/core/libcutils",
+    source / "submodules/core/include",
+    source / "submodules/libziparchive/include",
+    source / "submodules/logging/liblog",
 )
 patched_headers = []
 for directory in android_header_dirs:
@@ -92,6 +105,7 @@ for required in (
     "submodules/native/include/android/configuration.h",
     "submodules/native/include/android/asset_manager.h",
     "submodules/logging/liblog/include/log/log_main.h",
+    "submodules/libziparchive/include/ziparchive/zip_archive.h",
 ):
     if required not in patched_headers:
         raise RuntimeError(f"Expected Android Bionic header was not patched: {required}")
@@ -129,5 +143,45 @@ text = text.replace(
     'endif()',
     1,
 )
+
+# Linux-only device services are not used for AAPT2 resource compilation
+# in the browser. Do not provide fake implementations. If AAPT2 truly needs
+# one, the real linker will fail on its unresolved symbol.
+glue_file = source / "cmake/CMakeLists.txt"
+glue = glue_file.read_text()
+for lib in ("libincfs", "libselinux", "libsepol",
+            "libpackagelistparser", "libprocessgroup"):
+    old_include = "include(" + lib + ".cmake)"
+    if old_include not in glue:
+        raise RuntimeError("Missing upstream CMake include: " + old_include)
+    glue = glue.replace(old_include,
+        "if(NOT EMSCRIPTEN)\n    " + old_include + "\nendif()", 1)
+glue_file.write_text(glue)
+for lib in ("libincfs", "libselinux", "libsepol", "libpackagelistparser"):
+    old_link = "    " + lib + "\n"
+    if old_link not in text:
+        raise RuntimeError("Missing upstream AAPT2 dependency: " + lib)
+    text = text.replace(old_link, "", 1)
+
+# Exclude kernel-only translation units, leaving actual AAPT2 source intact.
+for name, suffixes in {
+    "libcutils.cmake": (
+        "/ashmem-dev.cpp", "/uevent.cpp", "/qtaguid.cpp",
+        "/android_reboot.cpp", "/klog.cpp", "/trace-dev.cpp",
+        "/partition_utils.cpp",
+    ),
+    "libutils.cmake": ("/Looper.cpp", "/Threads.cpp", "/Trace.cpp"),
+    "libziparchive.cmake": ("/incfs_support/signal_handling.cpp",),
+}.items():
+    path = source / "cmake" / name
+    contents = path.read_text()
+    for suffix in suffixes:
+        lines = [line for line in contents.splitlines(keepends=True)
+                 if ("$" + "{SRC}") in line and suffix in line]
+        if len(lines) != 1:
+            raise RuntimeError("Unexpected native-only source " + suffix + " in " + name)
+        contents = contents.replace(lines[0], "", 1)
+    path.write_text(contents)
+
 cmake.write_text(text)
 print("Patched isolated AOSP AAPT2 sources for Emscripten, including Bionic configuration header.")
