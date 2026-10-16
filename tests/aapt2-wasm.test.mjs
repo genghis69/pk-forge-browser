@@ -7,7 +7,10 @@ test('R.txt AAPT2 produit les valeurs exactes, sans ID inventé',()=>{
  assert.equal(ids['layout/activity_main'],0x7f020001);
  assert.equal(Object.keys(ids).length,2);
  assert.throws(()=>parseAapt2Symbols('int string x 0x7f010001\nint string x 0x7f010002'),/dupliqué/);
- assert.throws(()=>parseAapt2Symbols('int[] styleable MyView { 0x01010000 }'),/R.styleable/);
+ const styles=parseAapt2Symbols('int[] styleable MyView { 0x01010000, 0x7f020005 }\nint styleable MyView_tint 1');
+ assert.deepEqual(styles['styleable/MyView'],[0x01010000,0x7f020005]);
+ assert.equal(styles['styleable/MyView_tint'],1);
+ assert.throws(()=>parseAapt2Symbols('int[] styleable MyView { malformed }'),/invalide/);
  assert.throws(()=>parseAapt2Symbols(''),/R.txt/);
 });
 test('AAPT2 WASM doit exposer une véritable interface de compilation',()=>{
