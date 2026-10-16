@@ -12,7 +12,7 @@ text = text.replace('set(CMAKE_EXE_LINKER_FLAGS "-static")', 'if(NOT EMSCRIPTEN)
 if 'set(CMAKE_CXX_STANDARD 20)' not in text:
     raise RuntimeError('Upstream C++ standard changed')
 text = text.replace('set(CMAKE_CXX_STANDARD 20)',
-                    'if(EMSCRIPTEN)\\n    set(CMAKE_CXX_STANDARD 17)\\nelse()\\n    set(CMAKE_CXX_STANDARD 20)\\nendif()', 1)
+                    'if(EMSCRIPTEN)\n    set(CMAKE_CXX_STANDARD 17)\nelse()\n    set(CMAKE_CXX_STANDARD 20)\nendif()', 1)
 top.write_text(text)
 
 cmake = source / 'cmake' / 'aapt2.cmake'
