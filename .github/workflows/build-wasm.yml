@@ -1,0 +1,73 @@
+name: Construire Google Pack WebAssembly et publier APK Forge
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: apk-forge-browser
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer APK Forge Browser
+        uses: actions/checkout@v4
+      - name: Vérifier les modules JavaScript
+        run: |
+          node --check src/app.mjs
+          node --check src/crypto.mjs
+      - name: Installer Rust et cible WASM
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Installer wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - name: Récupérer Google Pack open source et figer la révision
+        run: |
+          git clone https://github.com/google/pack.git google-pack-source
+          cd google-pack-source
+          git checkout 7b60931e4058d892344ac57e49fcb582fd349b76
+      - name: Compiler le moteur Google Pack pour Chrome
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/dist/wasm/pack"
+          cd google-pack-source
+          wasm-pack build --locked --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack" pack-wasm
+          test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
+          test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
+      - name: Préparer le site statique
+        run: |
+          cp index.html dist/
+          mkdir -p dist/src
+          cp src/*.mjs dist/src/
+          cp README.md dist/
+          cp google-pack-source/LICENSE dist/LICENSE-GOOGLE-PACK
+          touch dist/.nojekyll
+          test -s dist/index.html
+      - name: Fournir l'archive complète avec WASM
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-forge-browser-avec-wasm
+          path: dist/
+          retention-days: 30
+      - name: Configurer GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Préparer le site pour GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Déployer le compilateur statique
+        id: deployment
+        uses: actions/deploy-pages@v4
