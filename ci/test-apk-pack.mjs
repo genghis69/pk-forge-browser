@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
-import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex} from '../dist/wasm/pack/pack_wasm.js';
+import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex,apkforge_sign_linked_apk} from '../dist/wasm/pack/pack_wasm.js';
 import {developmentPem,to64,from64} from '../src/crypto.mjs';
 
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
@@ -36,4 +36,10 @@ if(binary.length<300||(binary[0]!==0x50||binary[1]!==0x4b))
  throw Error('Signed APK was not produced');
 fs.mkdirSync('ci/build',{recursive:true});
 fs.writeFileSync('ci/build/apkforge-wasm-signed-proof.apk',binary);
-console.log('Signed APK WASM:',binary.length,'bytes; real R.string.app_name:',ids['string/app_name'].toString(16));
+const aapt2Linked=fs.readFileSync('ci/build/aapt2-linked.apk');
+const linkedSigned=from64(apkforge_sign_linked_apk(to64(aapt2Linked),[to64(dex)],input.combined_pem_string));
+if(linkedSigned.length<300||linkedSigned[0]!==0x50||linkedSigned[1]!==0x4b)
+ throw Error('WASM could not sign a native AAPT2 linked resource APK.');
+fs.writeFileSync('ci/build/apkforge-aapt2-wasm-signed-proof.apk',linkedSigned);
+console.log('Signed Google Pack APK:',binary.length,'bytes; real R.string.app_name:',ids['string/app_name'].toString(16));
+console.log('Native AAPT2 resources + WASM DEX assembly/signing:',linkedSigned.length,'bytes');
