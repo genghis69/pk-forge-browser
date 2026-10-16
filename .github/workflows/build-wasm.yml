@@ -133,10 +133,10 @@ jobs:
           mkdir -p ci/build/d8-before ci/build/d8-after
           java -cp ci/build/d8-short-original/r8-original.jar com.android.tools.r8.D8 \
             --thread-count 1 --min-api 26 --output ci/build/d8-before \
-            ci/build/proof/dev/apkforge/proof/AndroidProof.class
+            kotlin-ci/ForgeProof.class
           java -cp "$D8" com.android.tools.r8.D8 \
             --thread-count 1 --min-api 26 --output ci/build/d8-after \
-            ci/build/proof/dev/apkforge/proof/AndroidProof.class
+            kotlin-ci/ForgeProof.class
           cmp ci/build/d8-before/classes.dex ci/build/d8-after/classes.dex
           echo "PATCH D8 : le résultat natif original et corrigé est strictement identique."
       - name: Créer le catalogue de fichiers Kotlin
