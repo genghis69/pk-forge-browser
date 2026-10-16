@@ -111,6 +111,33 @@ jobs:
             rm -f dist/toolchains/r8/8.13.17/r8-8.13.17.jar
             echo "::warning::D8 indisponible, la démonstration se limitera aux fichiers .class"
           fi
+      - name: Adapter D8 pour l'écriture des valeurs 16 bits dans CheerpJ
+        run: |
+          set -euo pipefail
+          D8=dist/toolchains/r8/8.13.17/r8-8.13.17.jar
+          test -s "$D8"
+          mkdir -p ci/build/d8-short-original ci/build/d8-short-classes ci/build/d8-short-transformer
+          cp "$D8" ci/build/d8-short-original/r8-original.jar
+          unzip -p "$D8" com/android/tools/r8/dex/DexOutputBuffer.class > ci/build/d8-short-original/DexOutputBuffer.class
+          javac --release 17 -cp "$D8" -d ci/build/d8-short-classes ci/ApkForgeShortWriter.java
+          javac --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED \
+            -d ci/build/d8-short-transformer ci/PatchD8BrowserShorts.java
+          mkdir -p ci/build/d8-short-classes/com/android/tools/r8/dex
+          java --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED \
+            -cp ci/build/d8-short-transformer PatchD8BrowserShorts \
+            ci/build/d8-short-original/DexOutputBuffer.class \
+            ci/build/d8-short-classes/com/android/tools/r8/dex/DexOutputBuffer.class
+          jar --update --file "$D8" -C ci/build/d8-short-classes \
+            com/android/tools/r8/dex/DexOutputBuffer.class \
+            com/android/tools/r8/dex/ApkForgeShortWriter.class
+          unzip -t "$D8"
+          mkdir -p ci/build/d8-before ci/build/d8-after
+          java -cp ci/build/d8-short-original/r8-original.jar com.android.tools.r8.D8 \
+            --thread-count 1 --min-api 26 --output ci/build/d8-before ci/build/proof/dev/apkforge/proof/AndroidProof.class
+          java -cp "$D8" com.android.tools.r8.D8 \
+            --thread-count 1 --min-api 26 --output ci/build/d8-after ci/build/proof/dev/apkforge/proof/AndroidProof.class
+          cmp ci/build/d8-before/classes.dex ci/build/d8-after/classes.dex
+          echo "PATCH D8 : DEX identique à la version d'origine sur JVM normale."
       - name: Créer le catalogue de fichiers Kotlin
         run: |
           node ci/build-manifest.mjs
