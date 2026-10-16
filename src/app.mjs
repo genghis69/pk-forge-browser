@@ -1,4 +1,5 @@
 import {developmentPem,to64,from64} from './crypto.mjs';
+import {createSampleZip} from './sample.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
@@ -23,6 +24,10 @@ function projectInfo(paths,texts){
     kotlin:src.filter(p=>p.endsWith('.kt')).length,
     resources:resources.length,
     files:paths.length,
+    nativeLibs:paths.filter(p=>p.endsWith('.so')).length,
+    prebuiltDex:paths.filter(p=>/(?:^|\/)classes\d*\.dex$/.test(p)).length,
+    aarFiles:paths.filter(p=>p.endsWith('.aar')).length,
+    sourceSamples:src.slice(0,20),
     compatible:!!m&&!code&&/android:hasCode\s*=\s*["']false["']/.test(m)&&resources.length>0,
     resourcePaths:resources,
  };
@@ -66,6 +71,46 @@ async function checkEngine(){
     return true;
   }catch(e){$('engine').textContent='○ Moteur WASM indisponible';$('engine').dataset.ready='no';log('Moteur indisponible : '+e.message);return false;}
 }
+function diagnostic(a){
+ const lines=[];
+ if(!a.manifestPath)lines.push('• AndroidManifest.xml : absent ou non reconnu.');
+ if(a.kotlin)lines.push('• '+a.kotlin+' fichier(s) Kotlin : compilateur Kotlin/JVM nécessaire, NON INTÉGRÉ.');
+ if(a.java)lines.push('• '+a.java+' fichier(s) Java : compilateur Java nécessaire, NON INTÉGRÉ.');
+ if(a.java || a.kotlin)lines.push('• D8 : transformation du bytecode JVM en classes.dex, NON INTÉGRÉ.');
+ if(a.gradle!=='Non précisé')lines.push('• Gradle '+a.gradle+' : le moteur Gradle et Android Gradle Plugin ne sont PAS disponibles dans ce navigateur.');
+ if(a.nativeLibs)lines.push('• '+a.nativeLibs+' bibliothèques natives .so détectées : support Android NDK/ABI requis.');
+ if(a.aarFiles)lines.push('• '+a.aarFiles+' dépendances locales .aar : fusion des ressources et classes nécessaire.');
+ if(!a.resources)lines.push('• Aucune ressource res/ reconnue.');
+ if(!a.kotlin&&!a.java&&!a.manifestPath)lines.push('• Manifeste absent.');
+ if(!a.kotlin&&!a.java&&a.manifestPath&&!a.compatible)lines.push('• Google Pack attend une application sans code déclarée avec android:hasCode="false" et des ressources compatibles.');
+ lines.push('');
+ lines.push('Le ZIP a bien été lu. Le blocage est une limite du moteur de compilation actuel, pas une erreur de ton projet.');
+ lines.push('Ne change PAS android:hasCode pour contourner cette limite : cela ne compilerait pas les sources.');
+ return lines;
+}
+function downloadReport(){
+ const a=state.analysis;if(!a)return;
+ const report={
+  createdAt:new Date().toISOString(),sourceFile:state.file?.name||null,
+  engine:'Google Pack WebAssembly',engineSupports:'APK de ressources sans code Java/Kotlin',
+  buildPossibleWithCurrentEngine:a.compatible,project:a,
+  diagnostics:a.compatible?['Projet sans code détecté; compilation à valider.']:diagnostic(a),
+  requiredComponents:a.java||a.kotlin?
+   ['Compilateur Java/Kotlin dans le navigateur','Android API android.jar','D8/R8 compatible navigateur','Gestion des dépendances','Assemblage APK avec classes.dex']:[],
+  privacy:'Aucune source ZIP envoyée au serveur'
+ };
+ const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),link=document.createElement('a');
+ link.href=url;link.download='apk-forge-rapport-compatibilite.json';
+ document.body.append(link);link.click();link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+async function loadSample(){
+ try {
+  const sample=await createSampleZip();await analyze(sample);
+  if(state.zip){show(1);audit();log('Exemple Google Pack chargé : '+sample.name);}
+ } catch(e){$('uploadStatus').className='alert';$('uploadStatus').textContent='Impossible de créer l’exemple : '+e.message;show(0);}
+}
 function audit(){
   const a=state.analysis;if(!a)return;
   $('facts').replaceChildren(
@@ -74,15 +119,16 @@ function audit(){
     fact('Ressources',a.resources),fact('Fichiers dans ZIP',a.files)
   );
   $('audit').className='alert '+(a.compatible?'good':'');
-  $('audit').textContent=a.compatible?'Projet sans code détecté. Google Pack peut tenter de compiler ses ressources.':
-    'Projet incompatible avec ce moteur : Java/Kotlin présent, manifeste manquant, déclaration android:hasCode="false" absente, ou aucune ressource. Ce moteur ne remplace pas javac, Kotlin, Gradle ni D8.';
+  $('audit').textContent=a.compatible
+    ? 'Compatible avec le moteur de ressources Google Pack. Un APK sans classes.dex peut être généré. Il reste à tester le résultat sur un appareil adapté.'
+    : diagnostic(a).join('\n');
 }
 async function prepare(){
   const ready=await checkEngine();
   const a=state.analysis;
   $('compatibility').className='alert '+(ready&&a.compatible?'good':'');
   $('compatibility').textContent=!ready?'Le module WASM n’est pas disponible. Vérifie GitHub Actions et la présence de wasm/pack/pack_wasm_bg.wasm.':
-    !a.compatible?'Ce ZIP nécessite d’autres compilateurs. Pour le moment seuls les projets sans code natif sont acceptés.':
+    !a.compatible?diagnostic(a).join('\n'):
     'Moteur opérationnel. Compilation locale possible pour ce type de ressources.';
   $('compile').disabled=!(ready&&a.compatible);
 }
@@ -120,6 +166,9 @@ async function compile(){
  finally{$('compile').disabled=!(state.analysis?.compatible&&!!state.engine);}
 }
 $('zip').addEventListener('change',e=>analyze(e.target.files?.[0]));
+$('sample').addEventListener('click',loadSample);
+$('sample2').addEventListener('click',loadSample);
+$('report').addEventListener('click',downloadReport);
 $('drop').addEventListener('click',()=>$('zip').click());
 for(const event of ['dragover','dragenter'])$('drop').addEventListener(event,e=>{e.preventDefault();$('drop').classList.add('over');});
 $('drop').addEventListener('dragleave',e=>{e.preventDefault();$('drop').classList.remove('over');});

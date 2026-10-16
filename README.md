@@ -30,3 +30,7 @@ Les APK signés avec une clé temporaire ne sont pas destinés aux mises à jour
 - Google Pack (Apache-2.0) : https://github.com/google/pack, commit `7b60931e4058d892344ac57e49fcb582fd349b76`
 - JSZip 3.10.1 (MIT) chargé depuis jsDelivr : https://stuk.github.io/jszip/
 - Le workflow conserve la licence de Google Pack dans la distribution.
+
+## Diagnostic Java et Kotlin
+
+Le bouton Compiler reste désactivé lorsque le ZIP contient des sources Java ou Kotlin : ces compilateurs ainsi que D8 ne sont pas encore intégrés. Le site indique maintenant les composants manquants et permet d’exporter un rapport JSON. Pour tester la chaîne réellement disponible, utiliser le bouton **Charger un projet compatible de démonstration**. Il crée un ZIP de cadran Wear OS sans code localement puis permet d’essayer Google Pack dans le navigateur.
