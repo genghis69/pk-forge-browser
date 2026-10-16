@@ -63,7 +63,7 @@ for directory in android_header_dirs:
             "#else\n"
             "#ifndef __BEGIN_DECLS\n"
             "#ifdef __cplusplus\n"
-            "#define __BEGIN_DECLS extern \\"C\\" {\n"
+            "#define __BEGIN_DECLS extern \"C\" {\n"
             "#define __END_DECLS }\n"
             "#else\n"
             "#define __BEGIN_DECLS\n"
