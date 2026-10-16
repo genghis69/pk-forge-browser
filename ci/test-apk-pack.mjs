@@ -14,7 +14,10 @@ const manifest='<?xml version="1.0" encoding="utf-8"?>\n'+
  '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.apkforge.browser.proof" android:versionCode="1" android:versionName="1.0">'+
  '<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/>'+
  '<application android:label="@string/app_name" android:hasCode="true">'+
- '<activity android:name=".MainActivity" android:exported="true"/></application></manifest>';
+ '<activity android:name=".MainActivity" android:exported="true">'+
+ '<intent-filter><action android:name="android.intent.action.MAIN"/>'+
+ '<category android:name="android.intent.category.LAUNCHER"/></intent-filter>'+
+ '</activity></application></manifest>';
 const strings='<resources><string name="app_name">APK Forge Smoke</string></resources>';
 const input={
  manifest_b64:to64(new TextEncoder().encode(manifest)),
@@ -25,7 +28,7 @@ const input={
 const ids=apkforge_resource_ids(input);
 if(!Number.isInteger(ids['string/app_name'])||ids['string/app_name']<0x7f010000)
  throw Error('The WASM linker did not return the real string/app_name R ID');
-const dex=fs.readFileSync('dex-ci/classes.dex');
+const dex=fs.readFileSync('ci/build/android-activity-dex/classes.dex');
 if(dex.subarray(0,4).toString()!=='dex\n')throw Error('Synthetic input is not DEX');
 const binary=from64(apkforge_sign_with_dex(input,[to64(dex)]));
 if(binary.length<300||binary.subarray(0,2).toString()!=='PK')

@@ -193,6 +193,22 @@ jobs:
           wasm-pack build . --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
+      - name: Compiler une vraie Activity Kotlin pour l'APK WebAssembly de test
+        run: |
+          set -euo pipefail
+          KOTLIN_CP="$(find dist/toolchains/kotlin/2.2.20/jars -name '*.jar' -print | paste -sd ':' -)"
+          mkdir -p ci/build/android-activity ci/build/android-activity-dex
+          java -cp "$KOTLIN_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
+            -no-reflect -jvm-target 17 \
+            -classpath "dist/toolchains/android/sdk/36/android.jar:dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar" \
+            -d ci/build/android-activity ci/samples/BrowserActivity.kt
+          test -s ci/build/android-activity/dev/apkforge/browser/proof/MainActivity.class
+          java -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 \
+            --thread-count 1 --min-api 26 \
+            --lib dist/toolchains/android/sdk/36/android.jar \
+            --output ci/build/android-activity-dex \
+            ci/build/android-activity dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar
+          test -s ci/build/android-activity-dex/classes.dex
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
         run: |
           set -euo pipefail
