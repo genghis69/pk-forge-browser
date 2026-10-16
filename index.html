@@ -33,16 +33,16 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
 </div>
 <section class="panel active" data-panel="0"><h2>Importer un projet ZIP</h2><p>Choisis un fichier ZIP contenant notamment AndroidManifest.xml et les ressources Android. Maximum : 150 Mo.</p><div class="drop" id="drop"><div class="sym">⬆</div><strong>Sélectionner ou déposer un ZIP</strong><p>Aucun transfert vers le serveur</p></div><input class="hidden" type="file" accept=".zip,application/zip" id="zip"><div id="uploadStatus" class="alert hidden"></div><div class="buttons"><button class="btn alt" id="sample" type="button">🧪 Charger un projet compatible de démonstration</button><button class="btn" id="next0" disabled>Suivant →</button></div></section>
 <section class="panel" data-panel="1"><h2>Analyse du projet Android</h2><p>Lecture du manifeste, des sources, des versions et des ressources.</p><div class="facts" id="facts"></div><div class="alert" id="audit"></div><div class="buttons"><button class="btn alt" data-back="0">← Retour</button><button class="btn" id="next1">Vérifier le compilateur →</button></div></section>
-<section class="panel" data-panel="2"><h2>Compilation WebAssembly</h2><p>Google Pack est limité aux APK sans code, notamment certains cadrans Wear OS. Les projets Java, Kotlin et Gradle natifs nécessitent une chaîne supplémentaire.</p><div class="alert" id="compatibility">Analyse en attente.</div><pre id="logs">[PRÊT] Aucun projet compilé.</pre><div class="buttons"><button class="btn alt" data-back="1">← Retour</button><button class="btn alt" id="report" type="button">⬇ Rapport de compatibilité</button><button class="btn alt" id="sample2" type="button">🧪 Tester un APK sans code</button><button class="btn" id="compile" disabled>Compiler et signer l'APK</button></div><div id="realResourcesPanel" style="border:1px solid #36567d;border-radius:16px;padding:19px;margin-top:22px;background:#0d1b2f">
- <h2 style="font-size:20px">🧩 Ressources Android et APK signé (Google Pack WebAssembly)</h2>
- <p><strong>Compilateur expérimental et limité :</strong> Google Pack produit un AndroidManifest.xml binaire, resources.arsc, des identifiants R exacts, puis peut signer un APK v2/v3 contenant les DEX construits dans Chrome. Il ne remplace pas AAPT2 complet.</p>
+<section class="panel" data-panel="2"><h2>Compilation WebAssembly</h2><p>AAPT2 WebAssembly compile les ressources Android originales dans le navigateur. Kotlin et D8 produisent le code exécutable ; Google Pack finalise et signe l’APK. La compatibilité de chaque projet doit être vérifiée.</p><div class="alert" id="compatibility">Analyse en attente.</div><pre id="logs">[PRÊT] Aucun projet compilé.</pre><div class="buttons"><button class="btn alt" data-back="1">← Retour</button><button class="btn alt" id="report" type="button">⬇ Rapport de compatibilité</button><button class="btn alt" id="sample2" type="button">🧪 Tester un APK sans code</button><button class="btn" id="compile" disabled>Compiler et signer l'APK</button></div><div id="realResourcesPanel" style="border:1px solid #36567d;border-radius:16px;padding:19px;margin-top:22px;background:#0d1b2f">
+ <h2 style="font-size:20px">🧩 Ressources Android AAPT2 et APK signé</h2>
+ <p><strong>Chaîne WebAssembly :</strong> AAPT2 compile les layouts, thèmes, couleurs, drawables et le manifeste en véritables ressources Android ; Kotlin et D8 produisent les DEX, puis Google Pack assemble et signe l’APK. Le projet doit passer chaque validation.</p>
  <p>Ordre : <strong>1.</strong> Préparer les ressources, <strong>2.</strong> recompiler Kotlin avec le vrai R, <strong>3.</strong> générer le DEX runtime, <strong>4.</strong> assembler l’APK. Les anciens DEX de diagnostic, construits avec R temporaire, sont refusés.</p>
  <div class="buttons">
   <button class="btn" id="realResourcesPrepare" type="button">1. Compiler ressources + R réels</button>
   <button class="btn alt" id="realApkAssemble" type="button" disabled>4. Assembler et signer l’APK</button>
  </div>
- <div id="realResourcesStatus" class="alert">Ressources non encore analysées. Certains thèmes, couleurs et layouts exigent AAPT2 et seront explicitement refusés.</div>
- <pre id="realResourcesLog">[PACK] Prêt. Aucune ressource utilisateur envoyée au serveur.</pre>
+ <div id="realResourcesStatus" class="alert">Ressources en attente : lance « 1. Compiler ressources + R réels ». AAPT2 WebAssembly prend en charge les fichiers XML Android ; chaque erreur éventuelle sera détaillée.</div>
+ <pre id="realResourcesLog">[AAPT2 / PACK] Prêt. Aucune ressource utilisateur envoyée au serveur.</pre>
 </div>
 <div style="margin-top:24px;border:1px solid #47648a;border-radius:16px;padding:20px;background:#0c192c">
 <h2>Préparation AAPT2 pour le projet Android</h2>
@@ -54,7 +54,7 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  <h2 style="font-size:21px">🛠 Compilation Kotlin Android (laboratoire, JAR puis DEX)</h2>
  <p><strong>ELM327 et projets compatibles :</strong> compile TOUS les fichiers <code>.kt</code> de <code>src/main</code> ensemble avec SDK Android 36, Kotlin 2.2.20, AndroidX Core et USB Serial. Les bibliothèques sont téléchargées dans Chrome et mises en mémoire pour CheerpJ. Aucun fichier du projet n’est envoyé à un serveur.</p>
  <p style="font-size:13px"><strong>Les deux étapes sont indépendantes :</strong> dès que Kotlin a créé le JAR, télécharge-le immédiatement. Lance ensuite D8 uniquement avec le bouton 2. Une conversion D8 lente ou bloquée ne fait plus recommencer Kotlin.</p>
- <p style="font-size:13px"><strong>Limite actuelle :</strong> génère un <code>R.kt</code> TEMPORAIRE pour vérifier le code. Les vraies ressources ne sont pas encore compilées par AAPT2. Même avec un DEX valide, aucun APK Android installable ne sera généré à cette étape.</p>
+ <p style="font-size:13px"><strong>Important :</strong> lance d’abord « Compiler ressources + R réels » : la recompilation Kotlin doit ensuite utiliser les identifiants R issus d’AAPT2. Le R temporaire n’est valable que pour le diagnostic et ne permet pas d’assembler l’APK final.</p>
  <div class="buttons">
   <button id="androidCompileAll" class="btn" type="button">1. Compiler les sources Kotlin → JAR</button>
   <button id="androidCompileDex" class="btn alt" type="button" disabled>2. Convertir ce JAR en DEX</button>
@@ -64,7 +64,7 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  <div style="margin-top:16px;border:1px solid #355678;border-radius:12px;padding:14px;background:#0d2231">
  <strong style="font-size:15px">Étape suivante : DEX avec bibliothèques d’exécution</strong>
  <p style="font-size:13px">Pour réduire les risques de contention des threads Java sous CheerpJ, teste le réglage <strong>1 thread</strong>. Ce n’est pas une garantie de rapidité. L'opération sur 21 JAR peut prendre plusieurs minutes ; les résultats du JAR Kotlin restent téléchargeables.</p>
- <p style="font-size:13px">Intégrer le code ELM327, Kotlin Stdlib, AndroidX, USB Serial et leurs dépendances dans D8. Un fichier ZIP contenant le ou les DEX sera disponible. <strong>Attention :</strong> AAPT2, les vrais ID des ressources et la signature APK ne sont pas encore disponibles.</p>
+ <p style="font-size:13px">Intégrer le code ELM327, Kotlin Stdlib, AndroidX, USB Serial et leurs dépendances dans D8. Un fichier ZIP contenant le ou les DEX sera disponible. <strong>Attention :</strong> le DEX doit être recompilé après AAPT2 avec les vrais identifiants R ; cette étape seule ne constitue pas encore un APK installable.</p>
  <div class="buttons">
   <label for="androidD8Threads" style="font-size:13px;color:#c4d9e8;align-self:center">Threads Java D8 :</label>
   <select id="androidD8Threads" style="background:#0b1728;color:#d9edff;border:1px solid #3c5675;padding:10px;border-radius:8px">
