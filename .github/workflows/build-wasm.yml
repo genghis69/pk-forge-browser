@@ -28,6 +28,39 @@ jobs:
       - name: Vérifier la démonstration sans code
         run: |
           node -e "import('./src/sample.mjs').then(m => { if (!String(m.createSampleZip).includes('AndroidManifest.xml')) process.exit(1); })"
+      - name: Préparer Java 17 pour vérifier le compilateur Kotlin
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Récupérer Kotlin 2.2.20 et ses dépendances Maven
+        run: |
+          mkdir -p dist/toolchains/kotlin/2.2.20/jars
+          mvn -B -ntp -f ci/kotlin-runtime.pom.xml dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory="$GITHUB_WORKSPACE/dist/toolchains/kotlin/2.2.20/jars"
+          test -s dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar
+      - name: Compiler un vrai fichier Kotlin en classes JVM sur la machine de validation
+        run: |
+          set -euo pipefail
+          KOTLIN_CP="$(find dist/toolchains/kotlin/2.2.20/jars -name '*.jar' -print | paste -sd ':' -)"
+          mkdir -p kotlin-ci
+          java -cp "$KOTLIN_CP" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-reflect -jvm-target 17 -classpath "dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar" -d kotlin-ci ci/samples/ForgeProof.kt
+          test -s kotlin-ci/ForgeProof.class
+          javap -classpath kotlin-ci -verbose ForgeProof | grep 'major version: 61'
+      - name: Essayer de préparer D8 pour le Web
+        run: |
+          mkdir -p dist/toolchains/r8/8.13.17
+          if curl -fLsS --retry 3 --max-time 90 "https://dl.google.com/dl/android/maven2/com/android/tools/r8/8.13.17/r8-8.13.17.jar" -o dist/toolchains/r8/8.13.17/r8-8.13.17.jar; then
+            mkdir -p dex-ci
+            java -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 --min-api 26 --output dex-ci kotlin-ci/ForgeProof.class
+            test -s dex-ci/classes.dex
+          else
+            rm -f dist/toolchains/r8/8.13.17/r8-8.13.17.jar
+            echo "::warning::D8 indisponible, la démonstration se limitera aux fichiers .class"
+          fi
+      - name: Créer le catalogue de fichiers Kotlin
+        run: |
+          node ci/build-manifest.mjs
+          test -s dist/toolchains/kotlin/2.2.20/manifest.json
       - name: Installer le compilateur Protocol Buffers requis par Google Pack
         run: |
           sudo apt-get update
