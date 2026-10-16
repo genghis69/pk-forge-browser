@@ -7,6 +7,7 @@
  */
 import {developmentPem,to64,from64} from './crypto.mjs';
 import {isGeneratedPath} from './analyzer.mjs';
+import {compileAapt2Wasm} from './aapt2-wasm.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -91,7 +92,7 @@ async function engine(){
  if(wasm)return wasm;
  const m=await import('../wasm/pack/pack_wasm.js');
  await m.default();
- if(typeof m.apkforge_resource_ids!=='function'||typeof m.apkforge_sign_with_dex!=='function')
+ if(typeof m.apkforge_resource_ids!=='function'||typeof m.apkforge_sign_with_dex!=='function'||typeof m.apkforge_sign_linked_apk!=='function')
   throw Error('Google Pack WASM doit être reconstruit avec les extensions APK Forge.');
  wasm=m;return m;
 }
@@ -110,6 +111,20 @@ export async function prepareRealResources(project){
  const xml=await project.files[path].async('string');
  const sourceFiles=(data.sourceSamples??[]).filter(x=>x.endsWith('.kt'));
  const sourceTexts=await Promise.all(sourceFiles.map(x=>project.files[x].async('string')));
+ // AAPT2 receives original XML/layout/styles and android.jar inside the browser.
+ // If no real WASM executable is deployed, only the explicit Google Pack subset remains.
+ const manifest=normalizedManifest(xml,data);
+ const aapt2=await compileAapt2Wasm({project,manifest,resourcePaths});
+ if(aapt2){
+  const namespace=data.namespace!=='Non précisé'?data.namespace:data.packageName;
+  linkedRCode(namespace,aapt2.ids,sourceTexts);
+  session={zip:project.zip,project,ids:aapt2.ids,linkedApkBase64:to64(aapt2.apk),
+   signingPem:await developmentPem(),sourceTexts,namespace,engine:'aapt2-wasm'};
+  refreshApkButton(project.zip,null);
+  info('AAPT2 WASM : compile/link exécutés, '+Object.keys(aapt2.ids).length+' IDs issus du R.txt réel.');
+  info('Recompiler Kotlin avec ces IDs puis lancer D8 avant signature.');
+  return session;
+ }
  const reasons=resourceBlockers({resourcePaths,manifest:xml,sourceTexts});
  const textResources=[];
  for(const p of resourcePaths){
@@ -125,7 +140,6 @@ export async function prepareRealResources(project){
   }
  }
  if(reasons.length)throw Error('Google Pack ne peut pas compiler ce projet comme AAPT2 :\n• '+[...new Set(reasons)].join('\n• '));
- const manifest=normalizedManifest(xml,data);
  const resources=await Promise.all(resourcePaths.map(async p=>{
   const match=p.match(/(?:^|\/)res\/([^/]+)\/([^/]+)$/);
   if(!match)throw Error('Chemin res/ mal formé : '+p);
@@ -148,7 +162,7 @@ export async function prepareRealResources(project){
   const bytes=await file.async('uint8array');
   if(bytes[0]!==magic||bytes[1]!==0)throw Error('En-tête binaire invalide pour '+name);
  }
- session={zip:project.zip,project,ids,input,sourceTexts,namespace:data.namespace!=='Non précisé'?data.namespace:data.packageName};
+ session={zip:project.zip,project,ids,input,sourceTexts,namespace:data.namespace!=='Non précisé'?data.namespace:data.packageName,engine:'google-pack'};
  refreshApkButton(project.zip,null);
  info('Ressources compilées : manifeste binaire, resources.arsc, '+Object.keys(ids).length+' identifiants Android réels.');
  info('Il faut maintenant RECOMPILER Kotlin avec ces identifiants avant la fusion D8.');
@@ -175,12 +189,15 @@ export async function assembleRealApk(project,artifact){
  }
  info('Assemblage ZIP, alignement et signature v2/v3 APRÈS insertion de '+payload.length+' DEX...');
  const wasm=await engine();
- const out=new Blob([from64(wasm.apkforge_sign_with_dex(prepared.input,payload))],{type:'application/vnd.android.package-archive'});
+ const signed=prepared.engine==='aapt2-wasm'
+  ? wasm.apkforge_sign_linked_apk(prepared.linkedApkBase64,payload,prepared.signingPem)
+  : wasm.apkforge_sign_with_dex(prepared.input,payload);
+ const out=new Blob([from64(signed)],{type:'application/vnd.android.package-archive'});
  const finalZip=await JSZip.loadAsync(out);
  for(const name of ['AndroidManifest.xml','resources.arsc',...names]){
   if(!finalZip.file(name))throw Error('APK incomplet : '+name);
  }
- info('APK signé construit dans Chrome ('+(out.size/1024).toFixed(1)+' Kio). Signature à vérifier avant installation.');
+ info('APK signé '+prepared.engine+' construit dans Chrome ('+(out.size/1024).toFixed(1)+' Kio). Signature à vérifier avant installation.');
  return out;
 }
 function save(blob,name){
