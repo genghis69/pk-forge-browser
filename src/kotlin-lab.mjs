@@ -1,5 +1,6 @@
 // APK Forge Browser : laboratoire JVM 17, Kotlin 2.2.20 et D8 (expérimental).
 import {toolchainUrl,toCheerpJPath,kotlinJarRelative,d8JarRelative,checkToolchainFiles} from './toolchain-paths.mjs';
+import {validateCompilerArtifact} from './compiler-results.mjs';
 // Les entrées et les fichiers compilés ne quittent pas le navigateur.
 const el=id=>document.getElementById(id);
 const demo='class ForgeProof {\n fun answer(): Int = 42\n fun message(): String = "Kotlin fonctionne"\n}\n';
@@ -69,9 +70,7 @@ async function compile(source,filename,isDemo){
  say('Code de retour Kotlin : '+code);
  if(code!==0)throw Error('Compilation Kotlin interrompue (code '+code+'). Un fichier Android réel requiert android.jar et les dépendances Maven.');
  if(isDemo){
-  const blob=await cjFileBlob(output+'/ForgeProof.class');
-  const magic=new Uint8Array(await blob.slice(0,4).arrayBuffer());
-  if(Array.from(magic).join(',')!=='202,254,186,190')throw Error('Sortie invalide : signature de classe Java absente.');
+  const blob=await validateCompilerArtifact(await cjFileBlob(output+'/ForgeProof.class'),'class');
   demoCompiled=true;
   el('kotlinDownloadClass').disabled=false;
   el('kotlinD8').disabled=!env.d8Jar;
@@ -91,9 +90,7 @@ async function dex(){
  const code=await cheerpjRunMain('com.android.tools.r8.D8',d8Jar(),
   '--min-api','26','--output',output,'/files/apkforge-kotlin/demo/ForgeProof.class');
  if(code!==0)throw Error('D8 a échoué avec le code '+code+'.');
- const blob=await cjFileBlob(output+'/classes.dex');
- const magic=new Uint8Array(await blob.slice(0,4).arrayBuffer());
- if(Array.from(magic).join(',')!=='100,101,120,10')throw Error('Le DEX généré ne possède pas la signature dex.');
+ const blob=await validateCompilerArtifact(await cjFileBlob(output+'/classes.dex'),'dex');
  d8Ready=true;
  el('kotlinDownloadDex').disabled=false;
  say('✔ classes.dex créé dans Chrome ('+blob.size+' octets).');
@@ -108,7 +105,7 @@ async function task(fn){
  finally{busy=false;for(const id of ids)el(id).disabled=false;el('kotlinFromZip').disabled=!el('kotlinSource').options.length;el('kotlinD8').disabled=!demoCompiled||!env?.d8Jar;}
 }
 async function download(path,filename){
- const blob=await cjFileBlob(path);
+ const blob=await validateCompilerArtifact(await cjFileBlob(path),filename.endsWith('.class')?'class':'dex');
  const url=URL.createObjectURL(blob);const a=document.createElement('a');
  a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),10000);

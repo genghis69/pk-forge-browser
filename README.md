@@ -46,3 +46,9 @@ Le pipeline télécharge les JAR Kotlin et les vérifie sous Java 17 avant de le
 ## Correction CheerpJ sur GitHub Pages
 
 Le chemin virtuel `/app/` de CheerpJ correspond à la racine du domaine. Sur ce dépôt GitHub Pages, les JAR Kotlin sont servis sous `/pk-forge-browser/toolchains/`, donc le classpath correct commence par `/app/pk-forge-browser/toolchains/`. `src/toolchain-paths.mjs` déduit le chemin depuis l’URL réelle du module, sans hardcoder le nom du dépôt, et vérifie chaque JAR (HEAD) avant de démarrer Java. Les tests automatisés couvrent GitHub Pages, une installation locale sous `/cmpl/` et un hébergement à la racine. Le bouton D8 est désactivé jusqu’à la production effective de ForgeProof.class. Cela résout les erreurs de chargement 404 observées, mais ne démontre pas encore la réussite de la compilation Kotlin sous CheerpJ.
+
+## Compatibilité Kotlin / CheerpJ : mesure CPU des threads
+
+Kotlin 2.2.20 appelle `ThreadMXBean.setThreadCpuTimeEnabled(true)` à l'initialisation de `PerformanceManager`. CheerpJ 4.3 ne prend pas en charge cet appel et déclenche une `UnsupportedOperationException`. Le script versionné `ci/PatchKotlinCpuTime.java` modifie **uniquement l'instruction INVOKEINTERFACE de ce setter** dans `kotlin-compiler-embeddable-2.2.20.jar` via l'ASM inclus dans Java 17. La suppression conserve le reste de la méthode, y compris l'initialisation du ThreadMXBean. La modification est contrôlée (exactement une occurrence) puis le JAR adapté est testé sur le runner avant publication. Le laboratoire confirme désormais l'existence et la signature du fichier `.class`/`.dex`, même si CheerpJ annonce un code de retour 0 malgré une exception d'un thread Java.
+
+Cette compatibilité ciblée **ne garantit pas** que d'autres fonctionnalités JVM, fichiers ou API natives exigées par Kotlin seront disponibles sous CheerpJ. Aucune compilation ELM327 complète n'est actuellement annoncée.

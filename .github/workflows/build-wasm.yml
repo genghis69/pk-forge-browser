@@ -25,6 +25,8 @@ jobs:
           node --check src/sample.mjs
           node --check src/analyzer.mjs
           node --check src/kotlin-lab.mjs
+          node --check src/compiler-results.mjs
+          node --test tests/compiler-results.test.mjs
           node --check src/toolchain-paths.mjs
           node --test tests/toolchain-paths.test.mjs
           node --test tests/analyzer.test.mjs
@@ -41,6 +43,15 @@ jobs:
           mkdir -p dist/toolchains/kotlin/2.2.20/jars
           mvn -B -ntp -f ci/kotlin-runtime.pom.xml dependency:copy-dependencies -DincludeScope=runtime -DoutputDirectory="$GITHUB_WORKSPACE/dist/toolchains/kotlin/2.2.20/jars"
           test -s dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar
+      - name: Adapter Kotlin à CheerpJ (CPU par thread non disponible)
+        run: |
+          set -euo pipefail
+          javac --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED -d ci ci/PatchKotlinCpuTime.java
+          java --add-exports java.base/jdk.internal.org.objectweb.asm=ALL-UNNAMED -cp ci PatchKotlinCpuTime "dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar"
+          if javap -classpath dist/toolchains/kotlin/2.2.20/jars/kotlin-compiler-embeddable-2.2.20.jar -c -p org.jetbrains.kotlin.util.PerformanceManager | grep 'ThreadMXBean.setThreadCpuTimeEnabled'; then
+            echo "::error::Kotlin PerformanceManager still enables unsupported thread CPU measurement"
+            exit 1
+          fi
       - name: Compiler un vrai fichier Kotlin en classes JVM sur la machine de validation
         run: |
           set -euo pipefail
