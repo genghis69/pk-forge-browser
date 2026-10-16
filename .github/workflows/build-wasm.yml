@@ -6,6 +6,7 @@ on:
 permissions:
   contents: read
   pages: write
+  actions: read
   id-token: write
 concurrency:
   group: apk-forge-browser
@@ -30,6 +31,8 @@ jobs:
           node --check src/apk-structure.mjs
           node --test tests/apk-structure.test.mjs
           node --check ci/test-aapt2-link.mjs
+          node --check ci/verify-aapt2-wasm-resources.mjs
+          node --check ci/verify-real-aapt2-wasm.mjs
           node --test tests/real-resources.test.mjs
           node --check ci/extend-pack.mjs
           node --test tests/decouple-d8.test.mjs
@@ -273,6 +276,25 @@ jobs:
       - name: Contrôler les SHA-256 de tous les outils immédiatement avant publication
         run: |
           node ci/verify-toolchains.mjs
+      - name: Importer AAPT2 WASM uniquement si le portage réel est validé
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          LAST="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/aapt2-wasm-port.yml/runs?status=success&per_page=1" --jq '.workflow_runs[0].id // empty')"
+          if [[ -z "$LAST" ]]; then
+            echo "::notice::Aucun port AAPT2 WASM réel et vérifié. Le navigateur conservera le moteur Google Pack limité."
+            exit 0
+          fi
+          mkdir -p dist/wasm/aapt2
+          gh run download "$LAST" --repo "$GITHUB_REPOSITORY" \
+            --name aapt2-wasm-authentique-verifie --dir dist/wasm/aapt2
+          test -s dist/wasm/aapt2/aapt2.js
+          test -s dist/wasm/aapt2/aapt2.wasm
+          node ci/verify-real-aapt2-wasm.mjs dist/wasm/aapt2/aapt2.js
+          node ci/verify-aapt2-wasm-resources.mjs \
+            dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
+          echo "Port AAPT2 WASM réel vérifié : publication autorisée."
       - name: Préparer le site statique
         run: |
           cp index.html dist/
