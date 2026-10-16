@@ -10,6 +10,7 @@ import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs'
 import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
 import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
 import {getResourceSession,linkedRCode,refreshApkButton} from './real-resources.mjs';
+import {verifyDexIntegrity} from './dex-integrity.mjs';
 const el=id=>document.getElementById(id);
 let locked=false,jarBlob=null,dexBlob=null,runtimeZip=null,lastCompilation=null;
 const moduleUrl=import.meta.url;
@@ -186,6 +187,8 @@ async function compileStandaloneDex(){
  const code=await observedJavaExecution('D8 des classes Kotlin',()=>cheerpjRunMain('com.android.tools.r8.D8',jar,...argv));
  if(code!==0)throw Error('D8 a renvoyé le code '+code+'. Vérifie F12 pour les détails.');
  dexBlob=await validateCompilerArtifact(await cjFileBlob(folder+'/classes.dex'),'dex');
+ await verifyDexIntegrity(new Uint8Array(await dexBlob.arrayBuffer()));
+ log('DEX de diagnostic : map_list, Adler32 et SHA-1 valides.');
  el('androidDexDownload').disabled=false;
  log('SUCCÈS : classes.dex '+(dexBlob.size/1024).toFixed(1)+' Kio, produit dans Chrome.');
  status('Kotlin '+sourceCount+' sources → '+classCount+' classes JVM → DEX '+(dexBlob.size/1024).toFixed(1)+' Kio. APK non assemblé.',true);
@@ -228,6 +231,8 @@ async function buildRuntimeDex(){
   const filename=dexFilename(i),blob=await cjFileBlob(path+'/'+filename);
   if(!blob){if(i===1)throw Error('D8 a terminé sans produire de classes.dex.');break;}
   await validateCompilerArtifact(blob,'dex');
+  const integrity=await verifyDexIntegrity(new Uint8Array(await blob.arrayBuffer()));
+  log('DEX '+filename+' : '+integrity.sections+' sections vérifiées (map_list, Adler32, SHA-1).');
   zip.file(filename,blob,{compression:'STORE'});
   dexFiles++;bytes+=blob.size;
   log('Vérifié : '+filename+' ('+(blob.size/1024).toFixed(1)+' Kio).');

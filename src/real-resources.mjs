@@ -9,7 +9,8 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {isGeneratedPath} from './analyzer.mjs';
 import {compileAapt2Wasm} from './aapt2-wasm.mjs';
 import {inspectSignedApk} from './apk-structure.mjs';
-import {assertApkLaunchClasses} from './apk-launch-check.mjs';
+import {assertApkLaunchClasses,definedDexClasses} from './apk-launch-check.mjs';
+import {verifyDexIntegrity,assertManifestProvidersPresent} from './dex-integrity.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -195,6 +196,9 @@ export async function assembleRealApk(project,artifact){
   const bytes=await zip.file(names[i]).async('uint8array');
   if(bytes.length<8||bytes[0]!==100||bytes[1]!==101||bytes[2]!==120||bytes[3]!==10)
    throw Error('DEX invalide : '+names[i]);
+  // ART requires a unique DEX map type 0; header checks alone miss this crash.
+  const integrity=await verifyDexIntegrity(bytes);
+  info(names[i]+' vérifié : '+integrity.sections+' sections DEX, Adler32 et SHA-1 corrects.');
   dexBuffers.push(bytes);
   payload.push(to64(bytes));
  }
@@ -204,6 +208,14 @@ export async function assembleRealApk(project,artifact){
   dexBuffers
  });
  info('Vérification du démarrage : '+launchCheck.checked.join(', ')+' présentes dans les DEX ('+launchCheck.classCount+' classes).');
+ const defined=new Set();
+ for(const dex of dexBuffers)for(const name of definedDexClasses(dex))defined.add(name);
+ const providers=assertManifestProvidersPresent({
+  manifest:prepared.normalizedManifest,
+  packageName:project.analysis.packageName,
+  definedClasses:defined
+ });
+ info('ContentProviders du manifeste vérifiés : '+providers.length+' classe(s), notamment FileProvider si déclaré.');
  info('Assemblage ZIP, alignement et signature v2/v3 APRÈS insertion de '+payload.length+' DEX...');
  const wasm=await engine();
  const signed=prepared.engine==='aapt2-wasm'
@@ -213,7 +225,16 @@ export async function assembleRealApk(project,artifact){
  const structure=inspectSignedApk(new Uint8Array(await out.arrayBuffer()));
  info('Structure ZIP : '+structure.entries+' entrées, alignment 4 vérifié ; v2='+structure.hasV2+', v3='+structure.hasV3+'.');
  info('Marqueurs vérifiés, mais authentification cryptographique à contrôler avec apksigner sur Android/CI.');
- const finalZip=await JSZip.loadAsync(out);
+ const finalZip=await JSZip.loadAsync(out,{checkCRC32:true});
+ for(let i=0;i<names.length;i++){
+  const actual=await finalZip.file(names[i])?.async('uint8array');
+  if(!actual)throw Error('DEX manquant dans l’APK final : '+names[i]);
+  await verifyDexIntegrity(actual);
+  const before=dexBuffers[i];
+  if(actual.length!==before.length||actual.some((value,index)=>value!==before[index]))
+   throw Error('Le moteur d’assemblage a modifié '+names[i]+'. APK rejeté avant téléchargement.');
+ }
+ info('DEX des APK finaux identiques octet pour octet à la sortie D8.');
  for(const name of ['AndroidManifest.xml','resources.arsc',...names]){
   if(!finalZip.file(name))throw Error('APK incomplet : '+name);
  }

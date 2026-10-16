@@ -7,6 +7,7 @@ import {webcrypto} from 'node:crypto';
 import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex,apkforge_sign_linked_apk} from '../dist/wasm/pack/pack_wasm.js';
 import {developmentPem,to64,from64} from '../src/crypto.mjs';
 import {inspectSignedApk} from '../src/apk-structure.mjs';
+import {verifyDexIntegrity} from '../src/dex-integrity.mjs';
 
 if(!globalThis.crypto)globalThis.crypto=webcrypto;
 const wasmBytes=fs.readFileSync('dist/wasm/pack/pack_wasm_bg.wasm');
@@ -32,6 +33,7 @@ if(!Number.isInteger(ids['string/app_name'])||ids['string/app_name']<0x7f010000)
  throw Error('The WASM linker did not return the real string/app_name R ID');
 const dex=fs.readFileSync('ci/build/android-activity-dex/classes.dex');
 if(dex.subarray(0,4).toString()!=='dex\n')throw Error('Synthetic input is not DEX');
+await verifyDexIntegrity(new Uint8Array(dex));
 const binary=from64(apkforge_sign_with_dex(input,[to64(dex)]));
 if(binary.length<300||(binary[0]!==0x50||binary[1]!==0x4b))
  throw Error('Signed APK was not produced');
