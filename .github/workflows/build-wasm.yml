@@ -25,6 +25,8 @@ jobs:
           node --check src/sample.mjs
           node --check src/analyzer.mjs
           node --check src/kotlin-lab.mjs
+          node --check src/toolchain-paths.mjs
+          node --test tests/toolchain-paths.test.mjs
           node --test tests/analyzer.test.mjs
       - name: Vérifier la démonstration sans code
         run: |
@@ -91,6 +93,24 @@ jobs:
           wasm-pack build . --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
+      - name: Vérifier que les JAR sont bien publiés à leur chemin GitHub Pages
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import {toolchainUrl,toCheerpJPath,kotlinJarRelative} from './src/toolchain-paths.mjs';
+          const origin='https://genghis69.github.io/pk-forge-browser/src/kotlin-lab.mjs';
+          const index=JSON.parse(fs.readFileSync('dist/toolchains/kotlin/2.2.20/manifest.json','utf8'));
+          for(const jar of index.jars){
+            const relative=kotlinJarRelative(jar);
+            const u=toolchainUrl(relative,origin);
+            const javaPath=toCheerpJPath(relative,origin);
+            if(!javaPath.startsWith('/app/pk-forge-browser/'))throw Error('Chemin CheerpJ incorrect: '+javaPath);
+            const file=path.join('dist/toolchains',relative);
+            if(!fs.existsSync(file)||fs.statSync(file).size<1000)throw Error('Fichier Kotlin manquant : '+file);
+          }
+          console.log('Vérification des chemins OK : '+index.jars.length+' bibliothèques.');
+          NODE
       - name: Préparer le site statique
         run: |
           cp index.html dist/

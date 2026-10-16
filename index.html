@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark"><title>APK Forge Browser • WebAssembly</title>
+<meta name="color-scheme" content="dark"><link rel="icon" href="data:,"><title>APK Forge Browser • WebAssembly</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,sans-serif;color:#eaf1ff;background:#080d17}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse 66% 50% at 50% -4%,#20355b 0%,#0e182b 45%,#080d17 90%);min-height:100vh}
@@ -39,7 +39,7 @@ code{color:#8de0ce}pre{padding:17px;background:#080f1b;max-height:260px;overflow
  <div class="buttons">
   <button class="btn alt" id="kotlinInit">1. Initialiser Java 17</button>
   <button class="btn" id="kotlinDemo">2. Compiler Kotlin (démonstration)</button>
-  <button class="btn alt" id="kotlinD8">3. Essayer D8</button>
+  <button class="btn alt" id="kotlinD8" disabled title="Disponible une fois ForgeProof.class créé">3. Essayer D8</button>
  </div>
  <p>Tester un fichier Kotlin du ZIP (les imports Android peuvent empêcher sa compilation tant qu'android.jar est absent) :</p>
  <div class="buttons">
