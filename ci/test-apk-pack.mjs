@@ -25,7 +25,8 @@ const input={
  combined_pem_string:await developmentPem(),
  generate_aab:false
 };
-const ids=apkforge_resource_ids(input);
+const rawIds=apkforge_resource_ids(input);
+const ids=rawIds instanceof Map?Object.fromEntries(rawIds):rawIds;
 if(!Number.isInteger(ids['string/app_name'])||ids['string/app_name']<0x7f010000)
  throw Error('The WASM linker did not return the real string/app_name R ID');
 const dex=fs.readFileSync('ci/build/android-activity-dex/classes.dex');

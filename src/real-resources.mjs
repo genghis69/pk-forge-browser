@@ -137,7 +137,8 @@ export async function prepareRealResources(project){
  const input={manifest_b64:to64(new TextEncoder().encode(manifest)),resources,combined_pem_string,generate_aab:false};
  info('Compilation du manifeste et des ressources avec Google Pack WebAssembly...');
  const wasm=await engine();
- const ids=wasm.apkforge_resource_ids(input);
+ const rawIds=wasm.apkforge_resource_ids(input);
+ const ids=rawIds instanceof Map?Object.fromEntries(rawIds):rawIds;
  linkedRCode(data.namespace!=='Non précisé'?data.namespace:data.packageName,ids,sourceTexts);
  const signedResources=wasm.build(input);
  const b=new Blob([from64(signedResources)],{type:'application/vnd.android.package-archive'});

@@ -203,11 +203,13 @@ jobs:
             -classpath "dist/toolchains/android/sdk/36/android.jar:dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar" \
             -d ci/build/android-activity ci/samples/BrowserActivity.kt
           test -s ci/build/android-activity/dev/apkforge/browser/proof/MainActivity.class
+          java -cp dist/toolchains/android/helpers/1/classes-tool.jar dev.apkforge.tools.BuildClassesJar ci/build/android-activity ci/build/android-activity.jar
+          test -s ci/build/android-activity.jar
           java -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 \
             --thread-count 1 --min-api 26 \
             --lib dist/toolchains/android/sdk/36/android.jar \
             --output ci/build/android-activity-dex \
-            ci/build/android-activity dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar
+            ci/build/android-activity.jar dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar
           test -s ci/build/android-activity-dex/classes.dex
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
         run: |
