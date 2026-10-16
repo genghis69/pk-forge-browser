@@ -25,6 +25,9 @@ jobs:
           node --check src/real-resources.mjs
           node --check src/aapt2-diagnostics.mjs
           node --test tests/aapt2-diagnostics.test.mjs
+          node --check src/aapt2-wasm.mjs
+          node --test tests/aapt2-wasm.test.mjs
+          node --check ci/test-aapt2-link.mjs
           node --test tests/real-resources.test.mjs
           node --check ci/extend-pack.mjs
           node --test tests/decouple-d8.test.mjs
@@ -213,6 +216,21 @@ jobs:
             --output ci/build/android-activity-dex \
             ci/build/android-activity.jar dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar
           test -s ci/build/android-activity-dex/classes.dex
+      - name: Construire une référence avec le véritable AAPT2 natif (CI uniquement)
+        run: |
+          set -euo pipefail
+          sdkmanager --install "build-tools;35.0.0"
+          node ci/test-aapt2-link.mjs --prepare
+          AAPT2="$ANDROID_HOME/build-tools/35.0.0/aapt2"
+          test -x "$AAPT2"
+          "$AAPT2" compile --dir ci/build/aapt2-src/res -o ci/build/aapt2-compiled.zip
+          test -s ci/build/aapt2-compiled.zip
+          "$AAPT2" link -o ci/build/aapt2-linked.apk \
+            -I dist/toolchains/android/sdk/36/android.jar \
+            --manifest ci/build/aapt2-src/AndroidManifest.xml \
+            --output-text-symbols ci/build/aapt2-R.txt \
+            -R ci/build/aapt2-compiled.zip
+          node ci/test-aapt2-link.mjs --verify
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
         run: |
           set -euo pipefail
@@ -222,8 +240,15 @@ jobs:
           unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'classes.dex'
           unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'resources.arsc'
           unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'AndroidManifest.xml'
-          sdkmanager --install "build-tools;35.0.0"
+          test -s ci/build/apkforge-aapt2-wasm-signed-proof.apk
+          unzip -t ci/build/apkforge-aapt2-wasm-signed-proof.apk
+          unzip -Z -1 ci/build/apkforge-aapt2-wasm-signed-proof.apk | grep -Fx 'classes.dex'
+          unzip -Z -1 ci/build/apkforge-aapt2-wasm-signed-proof.apk | grep -Fx 'res/layout/activity_main.xml'
+          unzip -Z -1 ci/build/apkforge-aapt2-wasm-signed-proof.apk | grep -Fx 'res/drawable/panel.xml'
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose ci/build/apkforge-wasm-signed-proof.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose ci/build/apkforge-aapt2-wasm-signed-proof.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 ci/build/apkforge-wasm-signed-proof.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 ci/build/apkforge-aapt2-wasm-signed-proof.apk
       - name: Vérifier que les JAR sont bien publiés à leur chemin GitHub Pages
         run: |
           node --input-type=module <<'NODE'
