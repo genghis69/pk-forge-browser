@@ -92,3 +92,27 @@ La fusion complète D8 peut durer longtemps dans Chrome. Un réglage facultatif 
 Le module WebAssembly Google Pack est étendu à la génération des **IDs R exacts** provenant de la même table de ressources que `resources.arsc`, puis à l'assemblage des fichiers DEX **avant** signature APK v2/v3. Les composants binaires proviennent exclusivement des sources du ZIP importé et des DEX produits par le navigateur. Une compilation Kotlin effectuée avec le R temporaire ne peut pas être utilisée pour un APK installable.
 
 Cette chaîne utilise une **alternative limitée à AAPT2**, et non AAPT2 lui-même. L'interface refuse explicitement les fonctionnalités non prises en charge par Google Pack : `res/layout/*.xml`, XML drawables, `res/values/themes.xml`, `colors.xml`, IDs d'interface, ressources qualifiées, etc. Le projet ELM327 nécessite ces fonctionnalités : il **n'est pas encore compatible avec l'assemblage final**. Seuls les projets utilisant des ressources actuellement prises en charge par Google Pack peuvent tenter la chaîne complète. Toute génération d'APK devra encore être confirmée par la validation de signature (apksigner) et un test d'installation sur Android. Les clés RSA de développement sont éphémères, empêchant les mises à jour signées entre sessions.
+
+
+## AAPT2 WebAssembly : pont intégré, binaire encore manquant (octobre 2026)
+
+Le fichier \`src/aapt2-wasm.mjs\` définit désormais une passerelle pour un **vrai binaire AAPT2 compilé pour WebAssembly/Emscripten**. Elle effectue exclusivement dans Chrome :
+
+1. Montage des sources \`res/\` et du manifeste d'origine dans le système de fichiers WASM ;
+2. Chargement de l'\`android.jar\` officiel API 36 depuis les fichiers statiques GitHub Pages ;
+3. Exécution de \`aapt2 compile\` puis \`aapt2 link\` dans le runtime WASM ;
+4. Lecture du \`R.txt\` émis par AAPT2 et récupération des identifiants exacts ;
+5. Assemblage des DEX produits par CheerpJ/D8 avec le ZIP de ressources AAPT2, puis signature v2/v3 via \`apkforge_sign_linked_apk\` (Google Pack WASM).
+
+**Le binaire \`wasm/aapt2/aapt2.js\` / \`.wasm\` n'est PAS encore produit ni distribué par ce dépôt.** Tant qu'un port AAPT2 réellement compilé, testé et publié n'existe pas, la passerelle n'est pas activée ; l'application continue de refuser les ressources complexes incompatibles avec Google Pack. Aucun résultat AAPT2 n'est simulé. Un futur port doit exporter une factory ESM compatible Emscripten, avec \`FS\` et \`callMain\` (conservation du runtime entre les commandes), et produire des fichiers \`.flat\`, un APK de ressources et \`R.txt\`. Les \`R.styleable\` avec tableaux demeurent explicitement refusés par le générateur Kotlin actuel.
+
+### Validation CI indépendante
+
+Le workflow teste désormais deux voies sur des **ressources synthétiques publiques** :
+
+- Google Pack WASM : génération d'IDs, ressources binaires, DEX et signature ;
+- AAPT2 **natif sur le runner GitHub Actions**, uniquement comme référence de format : compilation d'un layout XML, d'un drawable XML, d'un thème et d'un identifiant \`@+id\`, lecture des vrais symboles R, puis assemblage et signature de ce résultat par l'extension **WebAssembly** APK Forge.
+
+La signature des deux APK de test est contrôlée par \`apksigner verify\`, leur alignement par \`zipalign -c -v 4\` et leur structure par \`src/apk-structure.mjs\`. Le contrôle JS identifie le bloc v2/v3 et l'alignement, mais ne remplace **pas** la vérification cryptographique d'\`apksigner\`. Seul un résultat **vert du workflow après les nouvelles modifications** valide les deux scénarios CI, et non une ancienne exécution.
+
+Cette phase ne démontre ni un AAPT2 WebAssembly opérationnel, ni la réussite de l'installation sur un appareil Android, ni la compilation intégrale de projets ELM327 / Gradle complexes. Le moteur natif AAPT2 du runner n'exécute jamais le ZIP d'un utilisateur et n'est jamais sollicité par le navigateur. Les APK, DEX, JAR ou autres fichiers compilés inclus dans un ZIP utilisateur restent exclus du pipeline.
