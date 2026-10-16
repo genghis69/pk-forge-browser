@@ -101,6 +101,10 @@ jobs:
           cd google-pack-source/pack-wasm
           test -f Cargo.toml
           grep -q '^\[package\]' Cargo.toml
+          # Binaryen wasm-opt livré avec wasm-pack ne reconnaît pas encore
+          # les modules multi-tables générés par Rust 1.99.1.
+          # wasm-bindgen reste actif; seule l'optimisation wasm-opt est désactivée.
+          printf '\n[package.metadata.wasm-pack.profile.release]\nwasm-opt = false\n' >> Cargo.toml
           wasm-pack build . --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
