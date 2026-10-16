@@ -34,6 +34,7 @@ jobs:
           node --check src/jvm-artifacts.mjs
           node --check ci/build-android-manifest.mjs
           node --test tests/jvm-artifacts.test.mjs
+          node --check ci/verify-toolchains.mjs
           node --test tests/compiler-results.test.mjs
           node --check src/toolchain-paths.mjs
           node --test tests/toolchain-paths.test.mjs
@@ -197,6 +198,9 @@ jobs:
           }
           console.log('Vérification des chemins OK : '+index.jars.length+' bibliothèques.');
           NODE
+      - name: Contrôler les SHA-256 de tous les outils immédiatement avant publication
+        run: |
+          node ci/verify-toolchains.mjs
       - name: Préparer le site statique
         run: |
           cp index.html dist/

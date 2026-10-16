@@ -72,3 +72,9 @@ Dans Chrome, Kotlin 2.2.20 compile **toutes les sources ensemble** via CheerpJ, 
 ## Runtime DEX incluant les bibliothèques Android (phase intermédiaire)
 
 Après la compilation des sources Kotlin, un nouveau bouton **Intégrer les bibliothèques → DEX** lance D8 sur le JAR des sources, Kotlin stdlib 2.2.20, AndroidX Core et dépendances transitives, et USB Serial. Le stdlib Kotlin transitive 2.2.10 est volontairement exclu pour empêcher les classes dupliquées. Les outils compilent et fusionnent localement dans CheerpJ, les dépendances ont été préparées comme fichiers statiques par GitHub Actions. Le ZIP de diagnostic regroupe le ou les `classes*.dex` et un fichier de provenance. Cela **ne crée pas d'APK** : le R temporaire n'est pas remplacé et les ressources/manifeste n'ont pas subi AAPT2. Ne jamais renommer ce ZIP en APK.
+
+## JAR en cache périmé après un déploiement GitHub Pages
+
+Le manifeste Android est récupéré sans cache, mais les anciens chargements de JAR utilisaient `cache: 'force-cache'`. Le `classes-tool.jar` est recréé avec des métadonnées ZIP différentes lors des builds, ce qui peut donner un **nouveau SHA-256** sous le même nom. Le navigateur pouvait donc récupérer le manifeste d'une version et le JAR de la version précédente : `Intégrité SHA-256 incorrecte`.
+
+Désormais, chaque URL de JAR inclut le SHA-256 attendu (`?sha256=...`), est téléchargée avec `cache: 'no-store'`, et est contrôlée *avant* tout montage dans CheerpJ. Si le contenu reste différent, une unique seconde requête est tentée. En cas de nouvel échec, l'intégrité reste strictement bloquante et le détail des empreintes apparaît dans le diagnostic. La CI vérifie aussi les fichiers physiques de la distribution juste avant publication. Aucun contrôle de sécurité n'a été désactivé.
