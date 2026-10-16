@@ -24,6 +24,7 @@ jobs:
           node --check src/crypto.mjs
           node --check src/sample.mjs
           node --check src/analyzer.mjs
+          node --check src/kotlin-lab.mjs
           node --test tests/analyzer.test.mjs
       - name: Vérifier la démonstration sans code
         run: |

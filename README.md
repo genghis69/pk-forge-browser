@@ -38,3 +38,7 @@ Le bouton Compiler reste désactivé lorsque le ZIP contient des sources Java ou
 ## Analyse correcte du projet Kotlin
 
 L'analyseur privilégie `src/main/AndroidManifest.xml` et `app/build.gradle.kts`. Les répertoires Gradle générés (`build/`, `.gradle/`, etc.) sont exclus de la détection des entrées de compilation. Les APK et DEX présents dans un ZIP ne sont **jamais** pris comme substituts aux sources. Pour un projet comme ELM327 Universal OBD2 v4.0.1, Kotlin 2.2.20, AGP 8.13.2, Gradle 9.3.0, Java 17, dépendances AndroidX et USB serial sont identifiés. La compilation Kotlin n'est toujours pas intégrée.
+
+## Kotlin 2.2.20 dans le navigateur (laboratoire)
+
+Le pipeline télécharge les JAR Kotlin et les vérifie sous Java 17 avant de les publier dans `toolchains/kotlin/2.2.20`. L'interface est désormais équipée d'un laboratoire CheerpJ pour essayer la compilation `ForgeProof.kt` en `.class`, puis éventuellement D8 en `classes.dex`. La compatibilité effective dans Chrome demeure à tester et ne doit pas être confondue avec les validations de GitHub Actions. Les projets Android Kotlin/Gradle complets nécessitent encore `android.jar`, AAPT2, les dépendances Maven et un assembleur APK avec DEX.

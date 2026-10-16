@@ -1,6 +1,7 @@
 import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
+import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
@@ -90,6 +91,7 @@ async function loadSample(){
  } catch(e){$('uploadStatus').className='alert';$('uploadStatus').textContent='Impossible de créer l’exemple : '+e.message;show(0);}
 }
 function audit(){
+ refreshKotlinSources(state);
   const a=state.analysis;if(!a)return;
   $('facts').replaceChildren(
     fact('Nom',a.name),fact('Application ID',a.packageName),fact('Version',a.version+' (code '+a.versionCode+')'),
@@ -160,3 +162,4 @@ $('compile').addEventListener('click',compile);
 $('again').addEventListener('click',()=>{state.zip=null;state.files=null;state.analysis=null;$('zip').value='';$('next0').disabled=true;$('uploadStatus').className='hidden';show(0);});
 document.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>show(Number(el.dataset.back))));
 checkEngine();
+attachKotlinLab(()=>state);
