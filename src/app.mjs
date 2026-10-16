@@ -2,6 +2,7 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
+import {attachAndroidCompiler} from './android-compiler.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
@@ -163,3 +164,4 @@ $('again').addEventListener('click',()=>{state.zip=null;state.files=null;state.a
 document.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>show(Number(el.dataset.back))));
 checkEngine();
 attachKotlinLab(()=>state);
+attachAndroidCompiler(()=>state);

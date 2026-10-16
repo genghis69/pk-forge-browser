@@ -60,3 +60,11 @@ Kotlin 2.2.20 dépend de trois appels `ThreadMXBean` non pris en charge par Chee
 GitHub Pages ne répond pas toujours aux requêtes HTTP `Range` exigées par CheerpJ pour lire les JAR en `/app/`. Dorénavant `src/jvm-artifacts.mjs` charge chaque JAR intégralement avec fetch, contrôle l'empreinte SHA-256 issue du manifeste, puis monte le `Uint8Array` dans `/str/` via `cheerpOSAddStringFile`. Ceci n'exécute jamais les sources utilisateur sur GitHub : la compilation demeure dans Chrome. La mémoire requise augmente sensiblement ; les composants sont mis en mémoire uniquement à la première initialisation.
 
 Le résultat final dans Chrome reste à confirmer : GitHub Actions ne teste pas la JVM CheerpJ, seulement Java 17 natif et les règles de montage avec des simulations.
+
+## Compilation groupée Kotlin Android SDK 36 (expérimentale)
+
+Le site contient un nouveau bouton **Compiler tous les fichiers Kotlin du ZIP → DEX**. L'utilisateur importe son projet lui-même ; le navigateur extrait uniquement les fichiers de `src/main/java/**/*.kt` ou `src/main/kotlin/**/*.kt`. Les dossiers `build/`, fichiers APK, DEX, `.class` déjà présents sont exclus et **jamais réutilisés**.
+
+Le workflow GitHub Actions récupère Android SDK 36 officiel et résout un classpath de démonstration avec AndroidX Core 1.13.1 et USB Serial 3.11.0, prépare l'assembleur JAR Java et publie ces composants versionnés comme fichiers statiques. Aucune source privée ni aucun projet utilisateur n'est compilé sur GitHub : seule une classe de test synthétique est vérifiée lors du workflow.
+
+Dans Chrome, Kotlin 2.2.20 compile **toutes les sources ensemble** via CheerpJ, et un `R.kt` provisoire est généré uniquement à partir des ressources XML du ZIP pour satisfaire les références Kotlin au moment de la compilation. Le résultat `.class` est emballé en JAR puis peut être converti en DEX par D8. **Un tel DEX n'est pas un APK installable** : il reste à implémenter AAPT2, les vrais identifiants de ressources, la fusion des dépendances au runtime, la signature et l'assemblage final. Le catalogue Maven est limité aux coordonnées de la démonstration ; les versions différentes sont refusées plutôt que devinées.

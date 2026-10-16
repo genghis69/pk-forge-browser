@@ -124,6 +124,12 @@ export function attachKotlinLab(getProject){
  el('kotlinDownloadClass').addEventListener('click',()=>task(()=>download('/files/apkforge-kotlin/demo/ForgeProof.class','ForgeProof.class')));
  el('kotlinDownloadDex').addEventListener('click',()=>task(()=>download('/files/apkforge-kotlin/dex/classes.dex','classes.dex')));
 }
+/** Shared verified JVM for the Android SDK compilation experiment. */
+export async function getKotlinRuntime(){
+ if(busy)throw Error('Un autre compilateur JVM est déjà en cours. Attends sa fin.');
+ await init();
+ return {manifest:env,library};
+}
 export function refreshKotlinSources(project){
  const s=el('kotlinSource');
  const paths=project?.analysis?.sourceSamples?.filter(p=>p.endsWith('.kt'))??[];

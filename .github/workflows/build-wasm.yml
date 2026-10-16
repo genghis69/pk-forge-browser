@@ -21,6 +21,9 @@ jobs:
       - name: Vérifier les modules JavaScript
         run: |
           node --check src/app.mjs
+          node --check src/android-compiler.mjs
+          node --check src/android-sources.mjs
+          node --test tests/android-sources.test.mjs
           node --check src/crypto.mjs
           node --check src/sample.mjs
           node --check src/analyzer.mjs
