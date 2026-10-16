@@ -6,6 +6,7 @@ on:
       - 'ci/build-aapt2-emscripten.sh'
       - 'ci/patch-aapt2-emscripten.py'
       - 'ci/verify-real-aapt2-wasm.mjs'
+      - 'ci/verify-aapt2-wasm-resources.mjs'
       - '.github/workflows/aapt2-wasm-port.yml'
 permissions:
   contents: read
@@ -27,8 +28,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler cmake ninja-build pkg-config python3
+      - name: Installer le SDK Android 36 de référence pour vérifier les ressources
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36'
       - name: Compiler le véritable AAPT2 C++ avec Emscripten
         run: bash ci/build-aapt2-emscripten.sh
+      - name: Tester compile et link avec le WASM authentique
+        run: |
+          set -euo pipefail
+          test -s "$ANDROID_HOME/platforms/android-36/android.jar"
+          node ci/verify-aapt2-wasm-resources.mjs \
+            ci/build/aapt2-web/aapt2.js \
+            "$ANDROID_HOME/platforms/android-36/android.jar"
       - name: Distribuer uniquement un binaire réellement exécuté
         uses: actions/upload-artifact@v4
         with:

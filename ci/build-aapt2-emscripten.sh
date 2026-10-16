@@ -11,6 +11,8 @@ command -v protoc >/dev/null
 mkdir -p "$ROOT/ci/build"
 if [[ ! -f "$SRC/CMakeLists.txt" ]]; then
   git clone --depth 1 https://github.com/ReVanced/aapt2.git "$SRC"
+  git -C "$SRC" fetch --depth 1 origin adb1d7acef11a67849b8a6204a824e271c4c1952
+  git -C "$SRC" checkout --detach adb1d7acef11a67849b8a6204a824e271c4c1952
   git -C "$SRC" submodule update --init --recursive --depth 1 --jobs 8
   (cd "$SRC" && ./patch.sh)
 fi
@@ -24,7 +26,7 @@ emcmake cmake -S "$SRC" -B "$OUT" -GNinja \
   -DOPENSSL_NO_ASM=ON \
   -DBUILD_SHARED_LIBS=OFF \
   -DCMAKE_C_FLAGS="-sUSE_ZLIB=1" \
-  -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1"
+  -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1 -DFMT_USE_CONSTEVAL=0"
 emmake cmake --build "$OUT" --target aapt2 --parallel 4
 WASM_JS="$(find "$OUT" -type f -name aapt2.js -print -quit)"
 if [[ -z "$WASM_JS" || ! -s "$WASM_JS" || ! -s "${WASM_JS%.js}.wasm" ]]; then
