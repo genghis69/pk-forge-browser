@@ -1,38 +1,11 @@
 import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
+import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const fact=(name,value)=>{let x=document.createElement('div');x.className='fact';let t=document.createElement('small');t.textContent=name;let v=document.createElement('b');v.textContent=String(value??'Non détecté');x.append(t,v);return x;};
 const show=i=>{for(const el of document.querySelectorAll('[data-panel]'))el.classList.toggle('active',+el.dataset.panel===i);for(const el of document.querySelectorAll('[data-step]'))el.classList.toggle('on',+el.dataset.step===i);};
-function projectInfo(paths,texts){
- const text=Object.values(texts).join('\n');
- const m=texts[paths.find(p=>p.endsWith('AndroidManifest.xml'))]||'';
- const src=paths.filter(p=>/\.(java|kt)$/.test(p));
- const code=src.length>0 || /android:hasCode\s*=\s*["']true["']/.test(m);
- const resources=paths.filter(p=>/(?:^|\/)res\/[^/]+\/[^/]+$/.test(p));
- const wrapper=texts[paths.find(p=>p.endsWith('gradle-wrapper.properties'))]||'';
- const find=(src,re)=>src.match(re)?.[1]||'Non précisé';
- const parsed={
-    manifestPath:paths.find(p=>p.endsWith('AndroidManifest.xml')),
-    packageName:find(m,/\bpackage\s*=\s*["']([^"']+)/),
-    name:find(m,/android:label\s*=\s*["']([^"']+)/),
-    version:find(text,/\bversionName\s*(?:=|\s)\s*["']([^"']+)/),
-    gradle:find(wrapper,/gradle-([\d.]+)-(?:bin|all)\.zip/),
-    sdk:find(text,/\bcompileSdk\s*(?:=|\()\s*(\d+)/),
-    java:src.filter(p=>p.endsWith('.java')).length,
-    kotlin:src.filter(p=>p.endsWith('.kt')).length,
-    resources:resources.length,
-    files:paths.length,
-    nativeLibs:paths.filter(p=>p.endsWith('.so')).length,
-    prebuiltDex:paths.filter(p=>/(?:^|\/)classes\d*\.dex$/.test(p)).length,
-    aarFiles:paths.filter(p=>p.endsWith('.aar')).length,
-    sourceSamples:src.slice(0,20),
-    compatible:!!m&&!code&&/android:hasCode\s*=\s*["']false["']/.test(m)&&resources.length>0,
-    resourcePaths:resources,
- };
- return parsed;
-}
 async function analyze(file){
   try{
     if(!file||!file.name.toLowerCase().endsWith('.zip'))throw Error('Sélectionne un projet au format ZIP.');
@@ -47,7 +20,7 @@ async function analyze(file){
       if(total>500*1024*1024)throw Error('Archive décompressée supérieure à 500 Mo.');
     }
     const texts={};
-    for(const p of paths.filter(p=>/AndroidManifest\.xml$|gradle-wrapper\.properties$|(?:^|\/)(?:build|settings)\.gradle(?:\.kts)?$/.test(p))){
+    for(const p of paths.filter(p=>!isGeneratedPath(p) && /AndroidManifest\.xml$|gradle-wrapper\.properties$|(?:^|\/)(?:build|settings)\.gradle(?:\.kts)?$/.test(p))){
       if((zip.files[p]._data?.uncompressedSize||0)<1024*1024)texts[p]=await zip.files[p].async('string');
     }
     const a=projectInfo(paths,texts);
@@ -75,6 +48,11 @@ function diagnostic(a){
  const lines=[];
  if(!a.manifestPath)lines.push('• AndroidManifest.xml : absent ou non reconnu.');
  if(a.kotlin)lines.push('• '+a.kotlin+' fichier(s) Kotlin : compilateur Kotlin/JVM nécessaire, NON INTÉGRÉ.');
+ if(a.kotlinPlugin!=='Non précisé')lines.push('• Kotlin Plugin '+a.kotlinPlugin+' (cible JVM '+a.kotlinJvmTarget+') : JVM et compilateur Kotlin requis.');
+ if(a.agp!=='Non précisé')lines.push('• Android Gradle Plugin '+a.agp+' : chaîne AGP / AAPT2 absente.');
+ if(a.dependencies.length)lines.push('• Bibliothèques externes à résoudre : '+a.dependencies.join(', ')+'.');
+ if(a.repositoryHints.length)lines.push('• Dépôt supplémentaire : '+a.repositoryHints.join(', ')+'.');
+ if(a.ignoredGenerated)lines.push('• '+a.ignoredGenerated+' fichiers générés ignorés lors de l’analyse (build/, .gradle/, etc.).');
  if(a.java)lines.push('• '+a.java+' fichier(s) Java : compilateur Java nécessaire, NON INTÉGRÉ.');
  if(a.java || a.kotlin)lines.push('• D8 : transformation du bytecode JVM en classes.dex, NON INTÉGRÉ.');
  if(a.gradle!=='Non précisé')lines.push('• Gradle '+a.gradle+' : le moteur Gradle et Android Gradle Plugin ne sont PAS disponibles dans ce navigateur.');
@@ -114,9 +92,12 @@ async function loadSample(){
 function audit(){
   const a=state.analysis;if(!a)return;
   $('facts').replaceChildren(
-    fact('Nom',a.name),fact('Package',a.packageName),fact('Version',a.version),
-    fact('Gradle',a.gradle),fact('SDK',a.sdk),fact('Java / Kotlin',a.java+' / '+a.kotlin),
-    fact('Ressources',a.resources),fact('Fichiers dans ZIP',a.files)
+    fact('Nom',a.name),fact('Application ID',a.packageName),fact('Version',a.version+' (code '+a.versionCode+')'),
+    fact('Gradle',a.gradle),fact('Android Gradle Plugin',a.agp),fact('Kotlin Plugin',a.kotlinPlugin),
+    fact('SDK cible / minimum',a.targetSdk+' / '+a.minSdk),fact('SDK compilation',a.sdk),fact('Java / Kotlin',a.java+' / '+a.kotlin),
+    fact('Java / JVM cible',a.javaTarget+' / '+a.kotlinJvmTarget),fact('Dépendances Maven',a.dependencies.join(' | ')||'Aucune détectée'),
+    fact('Ressources',a.resources),fact('Sources utiles',a.sourceFiles),fact('Fichiers générés exclus',a.ignoredGenerated),
+    fact('Fichiers ZIP total',a.files)
   );
   $('audit').className='alert '+(a.compatible?'good':'');
   $('audit').textContent=a.compatible

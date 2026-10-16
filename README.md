@@ -34,3 +34,7 @@ Les APK signés avec une clé temporaire ne sont pas destinés aux mises à jour
 ## Diagnostic Java et Kotlin
 
 Le bouton Compiler reste désactivé lorsque le ZIP contient des sources Java ou Kotlin : ces compilateurs ainsi que D8 ne sont pas encore intégrés. Le site indique maintenant les composants manquants et permet d’exporter un rapport JSON. Pour tester la chaîne réellement disponible, utiliser le bouton **Charger un projet compatible de démonstration**. Il crée un ZIP de cadran Wear OS sans code localement puis permet d’essayer Google Pack dans le navigateur.
+
+## Analyse correcte du projet Kotlin
+
+L'analyseur privilégie `src/main/AndroidManifest.xml` et `app/build.gradle.kts`. Les répertoires Gradle générés (`build/`, `.gradle/`, etc.) sont exclus de la détection des entrées de compilation. Les APK et DEX présents dans un ZIP ne sont **jamais** pris comme substituts aux sources. Pour un projet comme ELM327 Universal OBD2 v4.0.1, Kotlin 2.2.20, AGP 8.13.2, Gradle 9.3.0, Java 17, dépendances AndroidX et USB serial sont identifiés. La compilation Kotlin n'est toujours pas intégrée.

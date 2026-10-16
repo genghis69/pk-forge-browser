@@ -23,6 +23,8 @@ jobs:
           node --check src/app.mjs
           node --check src/crypto.mjs
           node --check src/sample.mjs
+          node --check src/analyzer.mjs
+          node --test tests/analyzer.test.mjs
       - name: Vérifier la démonstration sans code
         run: |
           node -e "import('./src/sample.mjs').then(m => { if (!String(m.createSampleZip).includes('AndroidManifest.xml')) process.exit(1); })"

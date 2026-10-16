@@ -1,0 +1,67 @@
+/**
+ * Analyseur de projet Android (sources uniquement).
+ * Ne lit, n'exécute et ne réutilise aucun APK/DEX/class généré dans build/.
+ */
+const GENERATED_DIRS = new Set(['build','.gradle','.idea','.git','.cxx','.externalNativeBuild','out']);
+export function isGeneratedPath(path) {
+  return String(path).split('/').some(part => GENERATED_DIRS.has(part));
+}
+const find=(s,re)=>s.match(re)?.[1]||'Non précisé';
+const ends=(p,name)=>p===name||p.endsWith('/'+name);
+export function projectInfo(paths,texts={}) {
+  const sourcePaths=paths.filter(p=>!isGeneratedPath(p));
+  const kotlinFiles=sourcePaths.filter(p=>p.endsWith('.kt'));
+  const javaFiles=sourcePaths.filter(p=>p.endsWith('.java'));
+  const resourcePaths=sourcePaths.filter(p=>/(?:^|\/)res\/[^/]+\/[^/]+$/.test(p));
+  const manifests=sourcePaths.filter(p=>ends(p,'AndroidManifest.xml')).sort((a,b)=>{
+    const score=p=>p.endsWith('/src/main/AndroidManifest.xml')?100:p==='AndroidManifest.xml'?80:p.endsWith('/AndroidManifest.xml')?50:0;
+    return score(b)-score(a)||a.length-b.length;
+  });
+  const manifestPath=manifests[0]??null;
+  const m=manifestPath?(texts[manifestPath]||''):'';
+  const appGradlePath=sourcePaths.find(p=>/(?:^|\/)app\/build\.gradle(?:\.kts)?$/.test(p))
+    || sourcePaths.filter(p=>ends(p,'build.gradle.kts')||ends(p,'build.gradle')).sort((x,y)=>y.split('/').length-x.split('/').length)[0];
+  const appGradle=appGradlePath?(texts[appGradlePath]||''):'';
+  const gradleFiles=sourcePaths.filter(p=>ends(p,'build.gradle.kts')||ends(p,'build.gradle'));
+  const rootGradlePath=gradleFiles.filter(p=>p!==appGradlePath).sort((x,y)=>x.split('/').length-y.split('/').length)[0];
+  const rootGradle=rootGradlePath?(texts[rootGradlePath]||''):'';
+  const wrapperPath=sourcePaths.find(p=>ends(p,'gradle-wrapper.properties'));
+  const wrapper=wrapperPath?(texts[wrapperPath]||''):'';
+  const settingsPath=sourcePaths.find(p=>ends(p,'settings.gradle.kts')||ends(p,'settings.gradle'));
+  const settings=settingsPath?(texts[settingsPath]||''):'';
+  const dependencies=[...appGradle.matchAll(/\b(?:implementation|api|compileOnly|runtimeOnly|kapt|ksp|debugImplementation|testImplementation)\s*\(\s*["']([^"']+)["']\s*\)/g)].map(m=>m[1]);
+  const packageName=find(appGradle,/\bapplicationId\s*(?:=|\()\s*["']([^"']+)/);
+  const sourcePackage=find(m,/\bpackage\s*=\s*["']([^"']+)/);
+  const namespace=find(appGradle,/\bnamespace\s*(?:=|\()\s*["']([^"']+)/);
+  const hasCodeFalse=/android:hasCode\s*=\s*["']false["']/.test(m);
+  const srcCode=kotlinFiles.length+javaFiles.length;
+  const nativeLibs=sourcePaths.filter(p=>p.endsWith('.so')).length;
+  return {
+    manifestPath,appGradlePath,rootGradlePath,
+    packageName:packageName!=='Non précisé'?packageName:(sourcePackage!=='Non précisé'?sourcePackage:namespace),
+    namespace,
+    name:find(m,/android:label\s*=\s*["']([^"']+)/),
+    version:find(appGradle,/\bversionName\s*(?:=|\()\s*["']([^"']+)/),
+    versionCode:find(appGradle,/\bversionCode\s*(?:=|\()\s*(\d+)/),
+    gradle:find(wrapper,/gradle-([\d.]+)-(?:bin|all)\.zip/),
+    agp:find(rootGradle,/\bid\s*\(\s*["']com\.android\.application["']\s*\)\s*version\s*["']([^"']+)/),
+    kotlinPlugin:find(rootGradle,/\bid\s*\(\s*["']org\.jetbrains\.kotlin\.android["']\s*\)\s*version\s*["']([^"']+)/),
+    javaTarget:find(appGradle,/\btargetCompatibility\s*=\s*JavaVersion\.VERSION_(\d+)/),
+    kotlinJvmTarget:find(appGradle,/\bjvmTarget\s*=\s*["']([^"']+)/),
+    sdk:find(appGradle,/\bcompileSdk\s*(?:=|\()\s*(\d+)/),
+    targetSdk:find(appGradle,/\btargetSdk\s*(?:=|\()\s*(\d+)/),
+    minSdk:find(appGradle,/\bminSdk\s*(?:=|\()\s*(\d+)/),
+    java:javaFiles.length,kotlin:kotlinFiles.length,
+    resources:resourcePaths.length, files:paths.length,sourceFiles:sourcePaths.length,
+    ignoredGenerated:paths.length-sourcePaths.length,
+    nativeLibs,
+    prebuiltDex:sourcePaths.filter(p=>/(?:^|\/)classes\d*\.dex$/.test(p)).length,
+    ignoredGeneratedDex:paths.filter(p=>isGeneratedPath(p)&&p.endsWith('.dex')).length,
+    aarFiles:sourcePaths.filter(p=>p.endsWith('.aar')).length,
+    sourceSamples:[...kotlinFiles,...javaFiles].slice(0,30),
+    dependencies,
+    repositoryHints:settings.includes('jitpack.io')?['https://jitpack.io']:[],
+    compatible:!!m&&!!hasCodeFalse&&srcCode===0&&nativeLibs===0&&resourcePaths.length>0,
+    resourcePaths
+  };
+}
