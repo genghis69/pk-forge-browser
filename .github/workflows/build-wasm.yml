@@ -37,6 +37,7 @@ jobs:
           node --check src/apk-launch-check.mjs
           node --test tests/apk-launch-check.test.mjs
           node --check src/dex-integrity.mjs
+          node --check ci/verify-d8-zip.mjs
           node --test tests/dex-integrity.test.mjs
           node --check src/apk-structure.mjs
           node --test tests/apk-structure.test.mjs
@@ -170,13 +171,15 @@ jobs:
             --thread-count 1 \
             --min-api 26 \
             --lib dist/toolchains/android/sdk/36/android.jar \
-            --output ci/build/full-runtime-dex \
+            --output ci/build/full-runtime-dex.zip \
             ci/build/android-proof.jar \
             dist/toolchains/kotlin/2.2.20/jars/kotlin-stdlib-2.2.20.jar \
             "${RUNTIME_JARS[@]}"
-          test -s ci/build/full-runtime-dex/classes.dex
-          du -h ci/build/full-runtime-dex/*.dex
-          echo "D8 runtime : DEX généré avec Kotlin Stdlib, AndroidX et USB."
+          test -s ci/build/full-runtime-dex.zip
+          unzip -t ci/build/full-runtime-dex.zip
+          unzip -Z -1 ci/build/full-runtime-dex.zip | grep -Fx 'classes.dex'
+          node ci/verify-d8-zip.mjs ci/build/full-runtime-dex.zip
+          echo "D8 runtime : DEX ZIP validés avec Kotlin Stdlib, AndroidX et USB."
       - name: Installer le compilateur Protocol Buffers requis par Google Pack
         run: |
           sudo apt-get update

@@ -212,30 +212,58 @@ async function buildRuntimeDex(){
    sha256:runtime.manifest.d8Sha256,moduleUrl,fetchFn:fetch,
    addFn:cheerpOSAddStringFile,progress:log
  });
- const path='/files/apkforge-kotlin/elm327-runtime-dex-'+Date.now().toString(36);
+ const outputDir='/files/apkforge-kotlin';
  const files=await runtime.library.java.nio.file.Files;
  const Paths=await runtime.library.java.nio.file.Paths;
- await files.createDirectories(await Paths.get(path));
- const argv=['--min-api','26',...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',path,
+ await files.createDirectories(await Paths.get(outputDir));
+ // D8 can output a ZIP itself. This avoids the old CheerpJ individual-files
+ // output path, which produced a malformed DEX with duplicate map type 0.
+ const d8ArchivePath=outputDir+'/elm327-runtime-dex-'+Date.now().toString(36)+'.zip';
+ const argv=['--min-api','26',...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',d8ArchivePath,
   jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
  log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
  log('Réglage D8 : '+d8ThreadDescription(selectedD8ThreadMode())+'.');
+ log('Mode D8 natif : sortie ZIP (au lieu de fichiers DEX séparés).');
  log('Traitement complet des bibliothèques. Cette étape peut prendre plusieurs minutes.');
  const started=performance.now();
  const code=await observedJavaExecution('Fusion D8 des dépendances Android',()=>cheerpjRunMain('com.android.tools.r8.D8',dexJar,...argv));
  if(code!==0)throw Error('D8 runtime a échoué (code '+code+'). Regarde la console F12 pour les bibliothèques incompatibles.');
- if(!window.JSZip)throw Error('JSZip indisponible pour regrouper les sorties DEX.');
+ if(!window.JSZip)throw Error('JSZip indisponible pour lire les DEX produits par D8.');
+ const d8ArchiveBlob=await cjFileBlob(d8ArchivePath);
+ if(!d8ArchiveBlob||d8ArchiveBlob.size<100)
+  throw Error('D8 n’a pas produit l’archive ZIP attendue dans CheerpJ.');
+ let d8Archive;
+ try{d8Archive=await JSZip.loadAsync(d8ArchiveBlob,{checkCRC32:true});}
+ catch(e){throw Error('ZIP D8 illisible ou CRC incorrect : '+e.message,{cause:e});}
+ const d8Names=Object.keys(d8Archive.files)
+  .filter(n=>/^classes(?:[2-9]|[1-9]\d+)?\.dex$/.test(n)&&!d8Archive.files[n].dir)
+  .sort((a,b)=>(a==='classes.dex'?1:Number(a.slice(7,-4)))-
+               (b==='classes.dex'?1:Number(b.slice(7,-4))));
+ if(!d8Names.length||d8Names.length>40)
+  throw Error('ZIP D8 : nombre incorrect de fichiers DEX ('+d8Names.length+').');
+ if(Object.keys(d8Archive.files).some(n=>n.endsWith('.dex')&&!d8Names.includes(n)))
+  throw Error('ZIP D8 : nom de fichier DEX inconnu.');
  const zip=new JSZip();
  let dexFiles=0,bytes=0;
- for(let i=1;i<=40;i++){
-  const filename=dexFilename(i),blob=await cjFileBlob(path+'/'+filename);
-  if(!blob){if(i===1)throw Error('D8 a terminé sans produire de classes.dex.');break;}
-  await validateCompilerArtifact(blob,'dex');
-  const integrity=await verifyDexIntegrity(new Uint8Array(await blob.arrayBuffer()));
-  log('DEX '+filename+' : '+integrity.sections+' sections vérifiées (map_list, Adler32, SHA-1).');
-  zip.file(filename,blob,{compression:'STORE'});
-  dexFiles++;bytes+=blob.size;
-  log('Vérifié : '+filename+' ('+(blob.size/1024).toFixed(1)+' Kio).');
+ for(let i=0;i<d8Names.length;i++){
+  const filename=dexFilename(i+1);
+  if(d8Names[i]!==filename)throw Error('ZIP D8 : fichiers DEX non contigus : '+d8Names.join(', '));
+  const buffer=await d8Archive.file(filename).async('uint8array');
+  try{
+   const integrity=await verifyDexIntegrity(buffer);
+   log('DEX '+filename+' : '+integrity.sections+' sections vérifiées (map_list, Adler32 et SHA-1).');
+  }catch(error){
+   const view=buffer.byteLength>=56?new DataView(buffer.buffer,buffer.byteOffset,buffer.byteLength):null;
+   const mapOff=view?.getUint32(0x34,true)??0;
+   const count=view&&mapOff+4<=buffer.length?view.getUint32(mapOff,true):null;
+   log('DIAGNOSTIC '+filename+' : '+buffer.length+' octets, map_off='+mapOff+
+     ', sections='+String(count)+', D8 a produit un ZIP natif via CheerpJ.');
+   throw Error('DEX '+filename+' invalide même en mode ZIP : '+error.message+
+    '. APK bloqué avant signature.',{cause:error});
+  }
+  zip.file(filename,buffer,{binary:true,compression:'STORE'});
+  dexFiles++;bytes+=buffer.length;
+  log('Vérifié : '+filename+' ('+(buffer.length/1024).toFixed(1)+' Kio).');
  }
  const receipt={
   kind:'ANDROID_RUNTIME_DEX_DIAGNOSTIC',
