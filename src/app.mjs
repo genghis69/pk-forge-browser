@@ -13,7 +13,7 @@ const autoStatus=(message,good=false)=>{
  const el=$('autoBuildStatus');if(el){el.textContent=message;el.className='alert'+(good?' good':'');}
 };
 const autoLog=message=>{
- const el=$('autoBuildLog');if(el){el.textContent+='\\n['+new Date().toLocaleTimeString('fr-FR')+'] '+message;el.scrollTop=el.scrollHeight;}
+ const el=$('autoBuildLog');if(el){el.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+message;el.scrollTop=el.scrollHeight;}
 };
 async function startAutomaticBuild(){
  if(autoBusy){autoLog('Compilation déjà en cours.');return;}
@@ -25,6 +25,12 @@ async function startAutomaticBuild(){
  if(progress)progress.value=0;
  if($('autoBuildLog'))$('autoBuildLog').textContent='[APK FORGE AUTO] Démarrage de la compilation automatique.';
  show(2);
+ audit();
+ const compatibility=$('compatibility');
+ if(compatibility){
+  compatibility.className='alert good';
+  compatibility.textContent='Compilation automatique active : AAPT2 → Kotlin → D8 → APK signé. Suis l’avancement ci-dessous ; les options techniques sont facultatives.';
+ }
  autoStatus('Préparation du projet Android dans le navigateur...');
  const onPhase=({phase,total,name,status,error})=>{
   if(progress&&status==='done')progress.value=phase;
