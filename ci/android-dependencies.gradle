@@ -1,0 +1,43 @@
+// Versioned compile-only dependencies: never build/upload user projects in GitHub Actions.
+plugins { id 'base' }
+repositories { google(); mavenCentral(); maven { url = uri('https://jitpack.io') } }
+configurations { androidCompile }
+dependencies {
+  androidCompile 'androidx.core:core:1.13.1'
+  androidCompile 'com.github.mik3y:usb-serial-for-android:3.11.0'
+}
+tasks.register('stageAndroidClasspath') {
+  doLast {
+    def work = System.getenv('GITHUB_WORKSPACE') ?: project.projectDir.absolutePath
+    def dest = new File(work,'dist/toolchains/android/deps/elm327-v1/jars')
+    dest.mkdirs()
+    def outputs = []
+    configurations.androidCompile.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+      def id = artifact.moduleVersion.id
+      def base = [id.group,id.name,id.version].join('-').replaceAll('[^A-Za-z0-9_.-]','_')
+      def ext = artifact.extension.toLowerCase()
+      if (ext == 'aar') {
+        def zip = new java.util.zip.ZipFile(artifact.file)
+        try {
+          def entries = zip.entries()
+          while (entries.hasMoreElements()) {
+            def entry = entries.nextElement()
+            if (entry.name == 'classes.jar' || (entry.name.startsWith('libs/') && entry.name.endsWith('.jar'))) {
+              def suffix = entry.name == 'classes.jar' ? '' : '-'+entry.name.substring(5).replaceAll('[^A-Za-z0-9_.-]','_')
+              def target = new File(dest,base+suffix+'.jar')
+              target.withOutputStream { out -> zip.getInputStream(entry).withCloseable { inp -> inp.transferTo(out) } }
+              outputs << target.name
+            }
+          }
+        } finally {zip.close()}
+      } else if (ext == 'jar') {
+        def target = new File(dest,base+'.jar')
+        target.bytes = artifact.file.bytes
+        outputs << target.name
+      }
+    }
+    if (!outputs.any { it.contains('usb-serial-for-android') }) throw new GradleException('USB Serial classpath missing')
+    if (!outputs.any { it.contains('androidx.core') }) throw new GradleException('AndroidX Core classpath missing')
+    logger.lifecycle('Android compile-only libraries: '+outputs.sort().join(', '))
+  }
+}

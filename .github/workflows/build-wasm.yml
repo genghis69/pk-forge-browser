@@ -27,6 +27,7 @@ jobs:
           node --check src/kotlin-lab.mjs
           node --check src/compiler-results.mjs
           node --check src/jvm-artifacts.mjs
+          node --check ci/build-android-manifest.mjs
           node --test tests/jvm-artifacts.test.mjs
           node --test tests/compiler-results.test.mjs
           node --check src/toolchain-paths.mjs
@@ -78,6 +79,29 @@ jobs:
         run: |
           node ci/build-manifest.mjs
           test -s dist/toolchains/kotlin/2.2.20/manifest.json
+      - name: Installer Android SDK 36 pour compiler localement dans le navigateur
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-36'
+      - name: Préparer android.jar API 36
+        run: |
+          set -euo pipefail
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK"
+          test -s "$SDK/platforms/android-36/android.jar"
+          mkdir -p dist/toolchains/android/sdk/36
+          cp "$SDK/platforms/android-36/android.jar" dist/toolchains/android/sdk/36/android.jar
+      - name: Installer Gradle pour la résolution des bibliothèques Maven
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+      - name: Résoudre AndroidX Core et USB Serial uniquement
+        run: |
+          gradle --no-daemon -b ci/android-dependencies.gradle stageAndroidClasspath --stacktrace
+      - name: Cataloguer SDK et bibliothèques Android
+        run: |
+          node ci/build-android-manifest.mjs
+          test -s dist/toolchains/android/manifest.json
       - name: Installer le compilateur Protocol Buffers requis par Google Pack
         run: |
           sudo apt-get update
