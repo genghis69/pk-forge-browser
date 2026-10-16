@@ -9,7 +9,7 @@ function projectInfo(paths,texts){
  const m=texts[paths.find(p=>p.endsWith('AndroidManifest.xml'))]||'';
  const src=paths.filter(p=>/\.(java|kt)$/.test(p));
  const code=src.length>0 || /android:hasCode\s*=\s*["']true["']/.test(m);
- const resources=paths.filter(p=>/\/res\/[^/]+\/[^/]+$/.test(p));
+ const resources=paths.filter(p=>/(?:^|\/)res\/[^/]+\/[^/]+$/.test(p));
  const wrapper=texts[paths.find(p=>p.endsWith('gradle-wrapper.properties'))]||'';
  const find=(src,re)=>src.match(re)?.[1]||'Non précisé';
  const parsed={
@@ -94,7 +94,7 @@ async function compile(){
   if(!manifest)throw Error('AndroidManifest.xml non trouvé.');
   const r=[];
   for(const p of a.resourcePaths){
-    const match=p.match(/\/res\/([^/]+)\/([^/]+)$/);if(!match)continue;
+    const match=p.match(/(?:^|\/)res\/([^/]+)\/([^/]+)$/);if(!match)continue;
     const buf=new Uint8Array(await state.files[p].async('uint8array'));
     r.push({subdirectory:match[1],name:match[2],contents_b64:to64(buf)});
   }
