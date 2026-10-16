@@ -2,15 +2,79 @@ import {developmentPem,to64,from64} from './crypto.mjs';
 import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
-import {attachAndroidCompiler,getRuntimeArtifacts} from './android-compiler.mjs';
-import {attachRealResourceCompiler} from './real-resources.mjs';
+import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileRuntimeDexForApk} from './android-compiler.mjs';
+import {attachRealResourceCompiler,prepareRealResources,assembleRealApk} from './real-resources.mjs';
+import {runAutomaticApkBuild} from './auto-build.mjs';
 import {assessAapt2,aapt2Report} from './aapt2-diagnostics.mjs';
 const $=id=>document.getElementById(id);
 let state={zip:null,files:null,manifest:null,resourceList:[],file:null,analysis:null,engine:null,objectUrl:null};
+let autoBusy=false;
+const autoStatus=(message,good=false)=>{
+ const el=$('autoBuildStatus');if(el){el.textContent=message;el.className='alert'+(good?' good':'');}
+};
+const autoLog=message=>{
+ const el=$('autoBuildLog');if(el){el.textContent+='\\n['+new Date().toLocaleTimeString('fr-FR')+'] '+message;el.scrollTop=el.scrollHeight;}
+};
+async function startAutomaticBuild(){
+ if(autoBusy){autoLog('Compilation déjà en cours.');return;}
+ if(!state.zip||!state.analysis)return;
+ autoBusy=true;
+ const snapshot=state.zip;
+ const start=$('autoBuild'),progress=$('autoBuildProgress');
+ if(start)start.disabled=true;
+ if(progress)progress.value=0;
+ if($('autoBuildLog'))$('autoBuildLog').textContent='[APK FORGE AUTO] Démarrage de la compilation automatique.';
+ show(2);
+ autoStatus('Préparation du projet Android dans le navigateur...');
+ const onPhase=({phase,total,name,status,error})=>{
+  if(progress&&status==='done')progress.value=phase;
+  if(status==='running'){autoStatus('Étape '+phase+'/'+total+' : '+name+'...');autoLog('DÉBUT : '+name);}
+  if(status==='done')autoLog('VALIDÉ : '+name);
+  if(status==='error')autoLog('ÉCHEC étape '+phase+'/'+total+' : '+name+' • '+String(error?.message||error));
+ };
+ try{
+  if(state.analysis.kotlin<1){
+   if(!state.analysis.compatible)throw Error('Ce projet ne contient pas de sources Kotlin compatibles avec le compilateur automatique.');
+   autoStatus('Compilation automatique de l’APK sans code...');
+   await compile();
+   return;
+  }
+  const apk=await runAutomaticApkBuild({
+   project:state,prepareResources:prepareRealResources,
+   compileKotlin:compileKotlinForApk,compileDex:compileRuntimeDexForApk,
+   assembleApk:assembleRealApk,onPhase
+  });
+  if(state.zip!==snapshot)throw Error('ZIP modifié pendant la compilation : APK non associé au projet.');
+  if(state.objectUrl)URL.revokeObjectURL(state.objectUrl);
+  state.objectUrl=URL.createObjectURL(apk);
+  const base=(state.analysis.name||'android-app').replace(/[^a-z0-9._-]+/gi,'-').slice(0,70);
+  const version=(state.analysis.version||'1').replace(/[^a-z0-9._-]+/gi,'-');
+  const link=$('download');
+  link.href=state.objectUrl;
+  link.download=base+'-'+version+'-browser-debug.apk';
+  $('result').textContent='APK compilé et signé automatiquement';
+  $('resultMeta').textContent=link.download+' • '+(apk.size/1024/1024).toFixed(2)+' Mio • '+state.analysis.packageName;
+  autoStatus('Compilation terminée. APK signé prêt à être téléchargé.',true);
+  autoLog('SUCCÈS : '+link.download+' ('+apk.size+' octets).');
+  show(3);
+  // Certains navigateurs bloquent un téléchargement déclenché longtemps
+  // après le clic. Le lien reste systématiquement visible comme secours.
+  link.click();
+ }catch(error){
+  autoStatus('Compilation interrompue : '+String(error?.message||error));
+  autoLog('ERREUR : '+String(error?.stack||error));
+  console.error('APK Forge automatique',error);
+  show(2);
+ }finally{
+  autoBusy=false;
+  if(start)start.disabled=false;
+ }
+}
 const log=s=>{let n=$('logs');n.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;n.scrollTop=n.scrollHeight;};
 const fact=(name,value)=>{let x=document.createElement('div');x.className='fact';let t=document.createElement('small');t.textContent=name;let v=document.createElement('b');v.textContent=String(value??'Non détecté');x.append(t,v);return x;};
 const show=i=>{for(const el of document.querySelectorAll('[data-panel]'))el.classList.toggle('active',+el.dataset.panel===i);for(const el of document.querySelectorAll('[data-step]'))el.classList.toggle('on',+el.dataset.step===i);};
 async function analyze(file){
+  if(autoBusy){autoStatus('Une compilation est déjà en cours. Attends sa fin avant de changer de ZIP.');return false;}
   try{
     if(!file||!file.name.toLowerCase().endsWith('.zip'))throw Error('Sélectionne un projet au format ZIP.');
     if(file.size>150*1024*1024)throw Error('Le ZIP dépasse 150 Mo.');
@@ -31,7 +95,8 @@ async function analyze(file){
     state={...state,zip,files:zip.files,file,analysis:a,manifest:a.manifestPath,resourceList:a.resourcePaths};
     $('uploadStatus').className='alert good';$('uploadStatus').textContent='ZIP analysé : '+file.name+' ('+paths.length+' fichiers)';
     $('next0').disabled=false;
-  }catch(e){state.zip=null;$('next0').disabled=true;$('uploadStatus').className='alert';$('uploadStatus').textContent='Erreur : '+e.message;}
+    return true;
+  }catch(e){state.zip=null;$('next0').disabled=true;$('uploadStatus').className='alert';$('uploadStatus').textContent='Erreur : '+e.message;return false;}
 }
 async function engine(){
   if(state.engine)return state.engine;
@@ -151,18 +216,19 @@ async function compile(){
  }catch(e){log('Erreur : '+e.message);$('compatibility').textContent='Échec de compilation : '+e.message;$('compatibility').className='alert';}
  finally{$('compile').disabled=!(state.analysis?.compatible&&!!state.engine);}
 }
-$('zip').addEventListener('change',e=>analyze(e.target.files?.[0]));
+$('zip').addEventListener('change',async e=>{if(await analyze(e.target.files?.[0]))await startAutomaticBuild();});
 $('sample').addEventListener('click',loadSample);
 $('sample2').addEventListener('click',loadSample);
 $('report').addEventListener('click',downloadReport);
 $('drop').addEventListener('click',()=>$('zip').click());
 for(const event of ['dragover','dragenter'])$('drop').addEventListener(event,e=>{e.preventDefault();$('drop').classList.add('over');});
 $('drop').addEventListener('dragleave',e=>{e.preventDefault();$('drop').classList.remove('over');});
-$('drop').addEventListener('drop',e=>{e.preventDefault();$('drop').classList.remove('over');analyze(e.dataTransfer.files?.[0]);});
-$('next0').addEventListener('click',()=>{audit();show(1);});
+$('drop').addEventListener('drop',async e=>{e.preventDefault();$('drop').classList.remove('over');if(await analyze(e.dataTransfer.files?.[0]))await startAutomaticBuild();});
+$('next0').addEventListener('click',()=>{audit();show(1);}); 
+$('autoBuild').addEventListener('click',startAutomaticBuild);
 $('next1').addEventListener('click',()=>{show(2);prepare();});
 $('compile').addEventListener('click',compile);
-$('again').addEventListener('click',()=>{state.zip=null;state.files=null;state.analysis=null;$('zip').value='';$('next0').disabled=true;$('uploadStatus').className='hidden';show(0);});
+$('again').addEventListener('click',()=>{if(autoBusy)return;state.zip=null;state.files=null;state.analysis=null;$('zip').value='';$('next0').disabled=true;$('uploadStatus').className='hidden';show(0);});
 document.querySelectorAll('[data-back]').forEach(el=>el.addEventListener('click',()=>show(Number(el.dataset.back))));
 checkEngine();
 attachKotlinLab(()=>state);

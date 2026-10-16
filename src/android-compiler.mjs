@@ -118,9 +118,9 @@ async function buildGroup(project){
  const rPath='/str/ApkForgeGeneratedR.kt';
  cheerpOSAddStringFile(rPath,r.code);mountedSources.push(rPath);
  const cp=[virtualJarPath('kotlin-stdlib-2.2.20.jar'),...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency').map(x=>x.path)].join(':');
- log('Kotlin 2.2.20 : compilation groupée des '+profile.paths.length+' sources + R de diagnostic...');
+ log('Kotlin 2.2.20 : compilation groupée des '+profile.paths.length+' sources avec '+(linkedSession?'R réel AAPT2':'R temporaire de diagnostic')+'...');
  const t0=performance.now();
- const ret=await observedJavaExecution('Compilation Kotlin des 16 sources',()=>cheerpjRunMain('org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
+ const ret=await observedJavaExecution('Compilation Kotlin des '+profile.paths.length+' sources',()=>cheerpjRunMain('org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
   runtime.manifest.jars.map(virtualJarPath).join(':'),
   '-no-reflect','-no-stdlib','-jvm-target','17','-classpath',cp,'-d',compiled,
   ...mountedSources));
@@ -250,12 +250,66 @@ async function buildRuntimeDex(){
  refreshApkButton(lastCompilation?.sourceZip,{runtimeZip,linkedResourceSession:lastCompilation.linkedResourceSession});
  el('androidRuntimeDownload').disabled=false;
  log('SUCCÈS : '+dexFiles+' DEX, '+(bytes/1024/1024).toFixed(2)+' Mio, '+((performance.now()-started)/1000).toFixed(1)+' secondes.');
- status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). AAPT2 et assemblage APK restent manquants.',true);
+ status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). '+(lastCompilation.linkedResourceSession?'Prêt pour assembler et signer l’APK.':'Compile les ressources AAPT2 avant assemblage.'),true);
 }
 function download(blob,name){
  if(!blob)throw Error('Aucun fichier généré.');
  const url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+/**
+ * Pipeline automatique : mêmes compilateurs Kotlin / D8 que les étapes manuelles.
+ * Conserve le verrou pendant chaque phase pour empêcher les doubles JVM.
+ */
+export async function compileKotlinForApk(project){
+ if(locked)throw Error('Une compilation Kotlin ou D8 est déjà en cours.');
+ if(!project?.zip||!getResourceSession(project))throw Error('AAPT2 doit préparer les vrais identifiants R avant Kotlin.');
+ locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
+ refreshApkButton(null,null);
+ resetProgress();
+ el('androidCompileAll').disabled=true;
+ el('androidCompileDex').disabled=true;
+ el('androidRuntimeDex').disabled=true;
+ el('androidJarDownload').disabled=true;
+ el('androidDexDownload').disabled=true;
+ el('androidRuntimeDownload').disabled=true;
+ status('Compilation Kotlin automatique en cours...');
+ el('androidCompileLog').textContent='[APK FORGE AUTO] Compilation Kotlin avec vrais identifiants R.';
+ try{
+  await buildGroup(project);
+  if(lastCompilation?.linkedResourceSession!==getResourceSession(project)||!jarBlob)
+   throw Error('Kotlin n’a pas produit de JAR lié à la session AAPT2.');
+  return lastCompilation;
+ }finally{
+  locked=false;
+  el('androidCompileAll').disabled=false;
+  el('androidCompileDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation;
+ }
+}
+export async function compileRuntimeDexForApk(project){
+ if(locked)throw Error('Une compilation Kotlin ou D8 est déjà en cours.');
+ if(!project?.zip||lastCompilation?.sourceZip!==project.zip||
+    lastCompilation?.linkedResourceSession!==getResourceSession(project)||!jarBlob)
+  throw Error('Le JAR Kotlin avec R réel doit être compilé pour ce ZIP avant D8.');
+ locked=true;runtimeZip=null;resetProgress();
+ el('androidCompileAll').disabled=true;
+ el('androidCompileDex').disabled=true;
+ el('androidRuntimeDex').disabled=true;
+ el('androidRuntimeDownload').disabled=true;
+ status('D8 automatique : création des DEX d’exécution et intégration des bibliothèques...');
+ try{
+  await buildRuntimeDex();
+  const artifact=getRuntimeArtifacts();
+  if(!artifact.runtimeZip||artifact.linkedResourceSession!==getResourceSession(project))
+   throw Error('DEX générés, mais ils ne correspondent pas à la session AAPT2 du projet.');
+  return artifact;
+ }finally{
+  locked=false;
+  el('androidCompileAll').disabled=false;
+  el('androidCompileDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation;
+ }
 }
 export function getRuntimeArtifacts(){
  return {runtimeZip,linkedResourceSession:lastCompilation?.linkedResourceSession||null,sourceZip:lastCompilation?.sourceZip||null};
