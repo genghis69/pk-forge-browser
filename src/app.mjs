@@ -3,7 +3,7 @@ import {createSampleZip} from './sample.mjs';
 import {projectInfo,isGeneratedPath} from './analyzer.mjs';
 import {classifyAndroidProject} from './project-support.mjs';
 import {attachKotlinLab,refreshKotlinSources} from './kotlin-lab.mjs';
-import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileRuntimeDexForApk,getLastD8Diagnostic} from './android-compiler.mjs';
+import {attachAndroidCompiler,getRuntimeArtifacts,compileKotlinForApk,compileJavaForApk,compileRuntimeDexForApk,getLastD8Diagnostic} from './android-compiler.mjs';
 import {attachRealResourceCompiler,prepareRealResources,assembleRealApk} from './real-resources.mjs';
 import {runAutomaticApkBuild} from './auto-build.mjs';
 import {assessAapt2,aapt2Report} from './aapt2-diagnostics.mjs';
@@ -67,7 +67,7 @@ async function startAutomaticBuild(){
   }
   const apk=await runAutomaticApkBuild({
    project:state,prepareResources:prepareRealResources,
-   compileKotlin:compileKotlinForApk,compileDex:compileRuntimeDexForApk,
+   compileKotlin:selection.mode==='java'?compileJavaForApk:compileKotlinForApk,compileDex:compileRuntimeDexForApk,
    assembleApk:assembleRealApk,onPhase
   });
   if(state.zip!==snapshot)throw Error('ZIP modifié pendant la compilation : APK non associé au projet.');

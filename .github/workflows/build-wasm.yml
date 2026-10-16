@@ -27,6 +27,8 @@ jobs:
         run: |
           node --check src/app.mjs
           node --check src/android-compiler.mjs
+          node --check src/java-sources.mjs
+          node --test tests/java-sources.test.mjs
           node --check src/real-resources.mjs
           node --check src/aapt2-diagnostics.mjs
           node --test tests/aapt2-diagnostics.test.mjs
@@ -179,6 +181,22 @@ jobs:
           mkdir -p ci/build/dex
           java -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 --min-api 26 --lib dist/toolchains/android/sdk/36/android.jar --output ci/build/dex ci/build/android-proof.jar
           test -s ci/build/dex/classes.dex
+      - name: Télécharger et valider Eclipse ECJ Java 17 pour CheerpJ
+        run: |
+          set -euo pipefail
+          mkdir -p dist/toolchains/android/java/ecj/3.43.0
+          mvn -B -ntp dependency:get -Dartifact=org.eclipse.jdt:ecj:3.43.0 -Dtransitive=false
+          cp "$HOME/.m2/repository/org/eclipse/jdt/ecj/3.43.0/ecj-3.43.0.jar" \
+             dist/toolchains/android/java/ecj/3.43.0/ecj.jar
+          test -s dist/toolchains/android/java/ecj/3.43.0/ecj.jar
+          mkdir -p ci/build/java-ecj-proof
+          java -cp dist/toolchains/android/java/ecj/3.43.0/ecj.jar \
+            org.eclipse.jdt.internal.compiler.batch.Main \
+            -17 -proc:none \
+            -classpath dist/toolchains/android/sdk/36/android.jar \
+            -d ci/build/java-ecj-proof ci/samples/BrowserActivity.java
+          test -s ci/build/java-ecj-proof/dev/apkforge/browser/proof/JavaActivity.class
+          javap -classpath ci/build/java-ecj-proof -verbose dev.apkforge.browser.proof.JavaActivity | grep 'major version: 61'
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs

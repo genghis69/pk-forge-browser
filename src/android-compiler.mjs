@@ -2,6 +2,7 @@
  * Aucune sortie APK ne peut être validée tant que AAPT2/ressources/manifest ne sont pas assemblés.
  */
 import {compileProfile,generateCompileOnlyR,buildDiagnostic} from './android-sources.mjs';
+import {javaCompileProfile,realJavaR} from './java-sources.mjs';
 import {mountJar,virtualJarPath} from './jvm-artifacts.mjs';
 import {toolchainUrl} from './toolchain-paths.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
@@ -201,7 +202,7 @@ async function compileStandaloneDex(){
  */
 async function buildRuntimeDex(){
  lastD8Diagnostic=null;
- if(!lastCompilation)throw Error('Compile les sources Kotlin avant de générer le DEX avec les bibliothèques.');
+ if(!lastCompilation)throw Error('Compile les sources Java ou Kotlin avant de générer les DEX avec les bibliothèques.');
  const {jarPath,jarRoot,classpath,runtime,sourceCount,classCount}=lastCompilation;
  const plan=planRuntimeJars(classpath);
  checkRuntimeInputs(plan,jarBlob);
@@ -221,7 +222,7 @@ async function buildRuntimeDex(){
  // D8 can output a ZIP itself. This avoids the old CheerpJ individual-files
  // output path, which produced a malformed DEX with duplicate map type 0.
  const d8ArchivePath=outputDir+'/elm327-runtime-dex-'+Date.now().toString(36)+'.zip';
- const argv=['--min-api','26',...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',d8ArchivePath,
+ const argv=['--min-api',String(lastCompilation.minSdk||26),...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',d8ArchivePath,
   jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
  log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
  log('Réglage D8 : '+d8ThreadDescription(selectedD8ThreadMode())+'.');
@@ -317,6 +318,91 @@ function download(blob,name){
  * Pipeline automatique : mêmes compilateurs Kotlin / D8 que les étapes manuelles.
  * Conserve le verrou pendant chaque phase pour empêcher les doubles JVM.
  */
+/** Java-only Android compilation through real Eclipse ECJ running inside CheerpJ.
+ * Fail closed for unsupported Maven coordinates and all incomplete sources.
+ */
+async function buildJavaGroup(project){
+ const response=await fetch(toolchainUrl('android/manifest.json',moduleUrl),{cache:'no-store'});
+ if(!response.ok)throw Error('Catalogue SDK Android indisponible : HTTP '+response.status);
+ const catalog=await response.json();
+ const profile=javaCompileProfile(project.analysis,catalog);
+ const linkedSession=getResourceSession(project);
+ if(!linkedSession||!linkedSession.ids||!Object.keys(linkedSession.ids).length)
+  throw Error('AAPT2 réel doit préparer les ressources avant Java.');
+ const javaCompiler=catalog.javaCompiler;
+ const sources=await Promise.all(profile.paths.map(path=>readSource(project,path)));
+ const runtime=await getKotlinRuntime();
+ const classpath=await mountAndroidClasspath(catalog);
+ const jarRoot=classpath.find(a=>a.name==='android.jar');
+ const tool=classpath.find(a=>a.name==='classes-tool.jar');
+ if(!jarRoot||!tool)throw Error('SDK Android 36 ou assembleur JVM absent.');
+ const ecj=await mountJar({
+  relative:javaCompiler.relative,filename:javaCompiler.name||'ecj.jar',
+  expectedSize:javaCompiler.size,sha256:javaCompiler.sha256,moduleUrl,
+  fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+ });
+ const runId=Date.now().toString(36);
+ const compiled='/files/apkforge-java/classes-'+runId;
+ const Paths=await runtime.library.java.nio.file.Paths;
+ const Files=await runtime.library.java.nio.file.Files;
+ await Files.createDirectories(await Paths.get(compiled));
+ const mountedSources=[];
+ for(let i=0;i<profile.paths.length;i++){
+  const name=profile.paths[i].split('/').at(-1);
+  const dest='/str/'+name;
+  cheerpOSAddStringFile(dest,sources[i]);
+  mountedSources.push(dest);
+ }
+ const rCode=realJavaR(profile.namespace,linkedSession.ids);
+ cheerpOSAddStringFile('/str/R.java',rCode);
+ mountedSources.push('/str/R.java');
+ const cp=classpath.filter(x=>x.kind==='platform'||x.kind==='dependency').map(x=>x.path).join(':');
+ log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
+ const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(
+  'org.eclipse.jdt.internal.compiler.batch.Main',ecj,
+  '-17','-proc:none','-classpath',cp,'-d',compiled,...mountedSources));
+ if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+'). Vérifie les imports Android et les dépendances du projet dans F12.');
+ const jarPath='/files/apkforge-java/java-compiled-'+runId+'.jar';
+ const jarRet=await observedJavaExecution('Assemblage des classes Java',()=>cheerpjRunMain(
+  'dev.apkforge.tools.BuildClassesJar',tool.path,compiled,jarPath));
+ if(jarRet!==0)throw Error('ECJ n’a pas pu assembler les classes .class.');
+ const blob=await cjFileBlob(jarPath);
+ if(!blob||blob.size<100)throw Error('ECJ n’a généré aucune archive JVM.');
+ const archive=await JSZip.loadAsync(blob,{checkCRC32:true});
+ const count=Object.keys(archive.files).filter(name=>name.endsWith('.class')).length;
+ if(count<profile.paths.length)throw Error('Compilation Java partielle ('+count+' classes / '+profile.paths.length+' sources).');
+ jarBlob=blob;
+ lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,
+  classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'java',minSdk:profile.minSdk};
+ el('androidCompileDex').disabled=false;
+ el('androidRuntimeDex').disabled=false;
+ el('androidJarDownload').disabled=false;
+ log('ECJ : '+count+' classes Java compilées. D8 utilisera les classes et bibliothèques Android.');
+ status('ECJ Java compilé : '+count+' classes JVM prêtes pour D8.',true);
+ return lastCompilation;
+}
+export async function compileJavaForApk(project){
+ if(locked)throw Error('Une compilation JVM est déjà en cours.');
+ if(!project?.zip||!getResourceSession(project))
+  throw Error('AAPT2 doit compiler les ressources avant Java.');
+ locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
+ refreshApkButton(null,null);
+ resetProgress();
+ for(const id of ['androidCompileAll','androidCompileDex','androidRuntimeDex','androidJarDownload',
+                  'androidDexDownload','androidRuntimeDownload']){
+  const node=el(id);if(node)node.disabled=true;
+ }
+ status('Compilation Java 17 automatique via ECJ...');
+ el('androidCompileLog').textContent='[APK FORGE AUTO] Démarrage ECJ Java avec R.java réel.';
+ try{return await buildJavaGroup(project);}
+ finally{
+  locked=false;
+  el('androidCompileAll').disabled=false;
+  el('androidCompileDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation;
+ }
+}
+
 export async function compileKotlinForApk(project){
  if(locked)throw Error('Une compilation Kotlin ou D8 est déjà en cours.');
  if(!project?.zip||!getResourceSession(project))throw Error('AAPT2 doit préparer les vrais identifiants R avant Kotlin.');

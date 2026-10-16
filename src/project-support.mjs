@@ -15,7 +15,19 @@ export function classifyAndroidProject(a){
  if(a.nativeLibs>0)return fail(a.nativeLibs+' bibliothèque(s) natives .so détectée(s). La chaîne actuelle ne sait pas empaqueter et vérifier les ABI natives.');
  if(a.aarFiles>0)return fail(a.aarFiles+' archive(s) .aar locale(s) détectée(s). La fusion de leurs classes, manifestes et ressources n’est pas encore intégrée.');
  if(java>0 && kotlin>0)return fail('Projet mixte détecté : '+summary+' Le navigateur sait compiler Kotlin pour les projets pris en charge, mais ne compile pas encore les sources Java du même module.');
- if(java>0)return fail('Projet Java détecté : '+java+' fichier(s) .java, aucun Kotlin. Le compilateur Java Android n’est pas encore intégré : l’application ne peut pas être créée en ignorant ces sources. Dépendances : '+(a.dependencies?.join(', ')||'aucune déclarée')+'.');
+ if(java>0){
+  const files=(a.javaPaths||[]).filter(p=>/(?:^|\/)src\/main\/(?:java|kotlin)\/.*\.java$/.test(p));
+  if(files.length!==java)return fail('Sources Java du module application introuvables ou incomplètes.');
+  if(!a.namespace||a.namespace==='Non précisé'&&!a.packageName)return fail('Le namespace Android est absent. Configure applicationId et namespace dans le fichier Gradle.');
+  if(!Number.isInteger(Number(a.sdk))||Number(a.sdk)>36||Number(a.sdk)<21)
+   return fail('compileSdk Android '+a.sdk+' non pris en charge. SDK maximum : 36.');
+  if(!Number.isInteger(Number(a.minSdk))||Number(a.minSdk)<21)
+   return fail('minSdk Android manquant ou inférieur à 21.');
+  if(a.unresolvedDependencies?.length)return fail('Bibliothèques Gradle non résolues : '+a.unresolvedDependencies.join(', '));
+  // Catalog compatibility is checked again against real SHA-256 manifests
+  // before ECJ is run. Unsupported Maven coordinates must never be ignored.
+  return {mode:'java',description:summary,reason:'Projet Java détecté. Chaîne expérimentale AAPT2 → ECJ Java 17 → D8 → signature. Les dépendances sont strictement vérifiées avant compilation.'};
+ }
  if(kotlin>0){
   const paths=a.kotlinPaths??a.sourceSamples?.filter(p=>p.endsWith('.kt'))??[];
   const selected=paths.filter(p=>/(?:^|\/)src\/main\/(?:java|kotlin)\/.*\.kt$/.test(p));

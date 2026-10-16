@@ -12,13 +12,16 @@ if(!fs.existsSync(sdk)||fs.statSync(sdk).size<1e6)throw Error('Android 36 androi
 const libs=fs.readdirSync(deps).filter(n=>n.endsWith('.jar')).sort();
 if(!libs.some(n=>n.includes('usb-serial-for-android')))throw Error('USB Serial unresolved');
 if(!libs.some(n=>n.includes('androidx.core')))throw Error('AndroidX Core unresolved');
+const javaPath=path.join(root,'java/ecj/3.43.0/ecj.jar');
+if(!fs.existsSync(javaPath)||fs.statSync(javaPath).size<1e6)throw Error('Eclipse ECJ Java compiler JAR is missing');
 const helperPath=path.join(root,'helpers/1/classes-tool.jar');
 if(!fs.existsSync(helperPath))throw Error('CheerpJ classes tool jar is missing');
 const artifacts=[{name:'classes-tool.jar',relative:'helpers/1/classes-tool.jar',kind:'tool',...checksum(helperPath)},
  {name:'android.jar',relative:'sdk/36/android.jar',kind:'platform',...checksum(sdk)},
  ...libs.map(name=>({name,relative:'deps/elm327-v1/jars/'+name,kind:'dependency',...checksum(path.join(deps,name))}))
 ];
-const result={format:1,compileSdk:36,profile:'elm327-v1',
+const result={format:2,compileSdk:36,profile:'elm327-v1',
+ javaCompiler:{name:'ecj.jar',relative:'java/ecj/3.43.0/ecj.jar',version:'3.43.0',entryPoint:'org.eclipse.jdt.internal.compiler.batch.Main',...checksum(javaPath)},
  requiredCoordinates:['androidx.core:core:1.13.1','com.github.mik3y:usb-serial-for-android:3.11.0'],
  artifacts,apkReady:false,
  scope:'compile-only classpath, R is a temporary diagnostic stub; resources not linked into an APK'};
