@@ -1,0 +1,35 @@
+/**
+ * Automated end-to-end smoke test for the WASM resource+DEX+signing pipeline.
+ * This uses a SYNTHETIC app and CI-generated DEX, never user project artifacts.
+ */
+import fs from 'node:fs';
+import {webcrypto} from 'node:crypto';
+import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex} from '../dist/wasm/pack/pack_wasm.js';
+import {developmentPem,to64,from64} from '../src/crypto.mjs';
+
+if(!globalThis.crypto)globalThis.crypto=webcrypto;
+const wasmBytes=fs.readFileSync('dist/wasm/pack/pack_wasm_bg.wasm');
+await wasmInit(wasmBytes);
+const manifest='<?xml version="1.0" encoding="utf-8"?>\n'+
+ '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.apkforge.browser.proof" android:versionCode="1" android:versionName="1.0">'+
+ '<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36"/>'+
+ '<application android:label="@string/app_name" android:hasCode="true">'+
+ '<activity android:name=".MainActivity" android:exported="true"/></application></manifest>';
+const strings='<resources><string name="app_name">APK Forge Smoke</string></resources>';
+const input={
+ manifest_b64:to64(new TextEncoder().encode(manifest)),
+ resources:[{subdirectory:'values',name:'strings.xml',contents_b64:to64(new TextEncoder().encode(strings))}],
+ combined_pem_string:await developmentPem(),
+ generate_aab:false
+};
+const ids=apkforge_resource_ids(input);
+if(!Number.isInteger(ids['string/app_name'])||ids['string/app_name']<0x7f010000)
+ throw Error('The WASM linker did not return the real string/app_name R ID');
+const dex=fs.readFileSync('dex-ci/classes.dex');
+if(dex.subarray(0,4).toString()!=='dex\n')throw Error('Synthetic input is not DEX');
+const binary=from64(apkforge_sign_with_dex(input,[to64(dex)]));
+if(binary.length<300||binary.subarray(0,2).toString()!=='PK')
+ throw Error('Signed APK was not produced');
+fs.mkdirSync('ci/build',{recursive:true});
+fs.writeFileSync('ci/build/apkforge-wasm-signed-proof.apk',binary);
+console.log('Signed APK WASM:',binary.length,'bytes; real R.string.app_name:',ids['string/app_name'].toString(16));

@@ -193,6 +193,17 @@ jobs:
           wasm-pack build . --release --target web --out-name pack_wasm --out-dir "$GITHUB_WORKSPACE/dist/wasm/pack"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm.js"
           test -s "$GITHUB_WORKSPACE/dist/wasm/pack/pack_wasm_bg.wasm"
+      - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
+        run: |
+          set -euo pipefail
+          node ci/test-apk-pack.mjs
+          test -s ci/build/apkforge-wasm-signed-proof.apk
+          unzip -t ci/build/apkforge-wasm-signed-proof.apk
+          unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'classes.dex'
+          unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'resources.arsc'
+          unzip -Z -1 ci/build/apkforge-wasm-signed-proof.apk | grep -Fx 'AndroidManifest.xml'
+          sdkmanager --install "build-tools;35.0.0"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose ci/build/apkforge-wasm-signed-proof.apk
       - name: Vérifier que les JAR sont bien publiés à leur chemin GitHub Pages
         run: |
           node --input-type=module <<'NODE'
