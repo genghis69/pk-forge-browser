@@ -54,3 +54,37 @@ test('Compile et link AAPT2 utilisent les vraies sources dans FS, y compris layo
  assert.equal(result.ids['style/Theme_App'],0x7f030001);
  assert.ok([...data.keys()].some(p=>p.endsWith('/res/values/themes.xml')));
 });
+
+test('Emscripten EEXIST errno 20 lors des mkdir répétés ne bloque pas AAPT2',async()=>{
+ const dirs=new Set(['/']),files=new Map(),calls=[];
+ const err20=()=>Object.assign(new Error(''),{name:'ErrnoError',errno:20});
+ const FS={
+  mkdir(p){if(dirs.has(p)||files.has(p))throw err20();const parent=p.slice(0,p.lastIndexOf('/'))||'/';if(!dirs.has(parent))throw Error('Parent absent: '+p);dirs.add(p);},
+  stat(p){if(dirs.has(p))return {mode:0o040000};if(files.has(p))return {mode:0o100000};throw Error('Introuvable '+p);},
+  isDir(mode){return (mode&0o170000)===0o040000;},
+  writeFile(p,data){if(!dirs.has(p.slice(0,p.lastIndexOf('/'))))throw Error('Dossier absent: '+p);files.set(p,new Uint8Array(data));},
+  readFile(p){if(!files.has(p))throw Error('Fichier absent: '+p);return files.get(p);}
+ };
+ const module={FS,callMain(args){
+  calls.push(args[0]);
+  if(args[0]==='compile')FS.writeFile(args[args.indexOf('-o')+1],Uint8Array.from([80,75,3,4]));
+  if(args[0]==='link'){
+   FS.writeFile(args[args.indexOf('-o')+1],Uint8Array.from([80,75,...Array(128).fill(0)]));
+   FS.writeFile(args[args.indexOf('--output-text-symbols')+1],new TextEncoder().encode('int layout main 0x7f020001\\n'));
+  }
+  return 0;
+ }};
+ const prefix='app/src/main/res/',input={
+  [prefix+'layout/first.xml']:'<FrameLayout/>',
+  [prefix+'layout/second.xml']:'<TextView/>',
+  [prefix+'values/strings.xml']:'<resources/>'
+ };
+ const project={files:Object.fromEntries(Object.entries(input).map(([p,data])=>[p,{async:async()=>new TextEncoder().encode(data)}]))};
+ const result=await compileAapt2Wasm({project,manifest:'<manifest/>',resourcePaths:Object.keys(input),
+  moduleFactory:async()=>module,
+  fetchFn:async()=>({ok:true,arrayBuffer:async()=>new Uint8Array(1100000).buffer})});
+ assert.deepEqual(calls,['compile','link']);
+ assert.equal(result.ids['layout/main'],0x7f020001);
+ assert.ok([...dirs].some(p=>p.endsWith('/res/layout')));
+ assert.ok([...dirs].some(p=>p.endsWith('/res/values')));
+});

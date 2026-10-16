@@ -46,11 +46,27 @@ export function assertAapt2Runtime(instance) {
   throw Error('Port AAPT2 WASM incompatible : export FS/callMain manquant.');
  return instance;
 }
-function writeDirectories(FS,path){
- const dirs=path.split('/').slice(0,-1);
- let current='';
- for(const dir of dirs){if(!dir)continue;current+='/'+dir;
-  try{FS.mkdir(current);}catch(e){if(!/exist/i.test(String(e?.message||e)))throw e;}
+function writeDirectories(FS,filePath){
+ const directory=filePath.slice(0,filePath.lastIndexOf('/'));
+ if(!directory||directory==='/')return;
+ try{
+  // Emscripten's FS.ErrnoError for EEXIST has errno=20 and often no message.
+  // mkdirTree checks this natively; unlike string matching it supports all locales.
+  if(typeof FS.mkdirTree==='function'){FS.mkdirTree(directory);return;}
+  let current='';
+  for(const name of directory.split('/').filter(Boolean)){
+   current+='/'+name;
+   try{FS.mkdir(current);}catch(e){
+    if(e?.errno!==20&&!/exist|existe/i.test(String(e?.message||e)))throw e;
+    // EEXIST is acceptable only if the existing filesystem node is a directory.
+    if(typeof FS.stat==='function'&&typeof FS.isDir==='function'&&
+       !FS.isDir(FS.stat(current).mode))
+     throw Error('Chemin occupé par un fichier et non un dossier : '+current,{cause:e});
+   }
+  }
+ }catch(e){
+  throw Error('AAPT2 : création du dossier virtuel '+directory+' impossible (errno '+
+   String(e?.errno??e?.cause?.errno??'inconnu')+') : '+String(e?.message||e),{cause:e});
  }
 }
 export function runAapt2(instance,args){

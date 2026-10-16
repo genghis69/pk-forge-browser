@@ -37,6 +37,7 @@ jobs:
           node --check ci/test-aapt2-link.mjs
           node --check ci/verify-aapt2-wasm-resources.mjs
           node --check ci/verify-real-aapt2-wasm.mjs
+          node --check ci/verify-aapt2-browser-adapter.mjs
           node --test tests/real-resources.test.mjs
           node --check ci/extend-pack.mjs
           node --test tests/decouple-d8.test.mjs
@@ -298,7 +299,9 @@ jobs:
           node ci/verify-real-aapt2-wasm.mjs dist/wasm/aapt2/aapt2.js
           node ci/verify-aapt2-wasm-resources.mjs \
             dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
-          echo "Port AAPT2 WASM réel vérifié : publication autorisée."
+          node ci/verify-aapt2-browser-adapter.mjs \
+            dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
+          echo "Port AAPT2 WASM réel vérifié dans l'adaptateur navigateur : publication autorisée."
       - name: Préparer le site statique
         run: |
           cp index.html dist/
