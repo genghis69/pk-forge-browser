@@ -9,6 +9,10 @@ if old not in text:
     raise RuntimeError('Upstream ABI selection has changed')
 text = text.replace(old, 'if(EMSCRIPTEN)\n    message(STATUS "AAPT2 WebAssembly experimental")\nelseif(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "armeabi-v7a")', 1)
 text = text.replace('set(CMAKE_EXE_LINKER_FLAGS "-static")', 'if(NOT EMSCRIPTEN)\n    set(CMAKE_EXE_LINKER_FLAGS "-static")\nendif()', 1)
+if 'set(CMAKE_CXX_STANDARD 20)' not in text:
+    raise RuntimeError('Upstream C++ standard changed')
+text = text.replace('set(CMAKE_CXX_STANDARD 20)',
+                    'if(EMSCRIPTEN)\\n    set(CMAKE_CXX_STANDARD 17)\\nelse()\\n    set(CMAKE_CXX_STANDARD 20)\\nendif()', 1)
 top.write_text(text)
 
 cmake = source / 'cmake' / 'aapt2.cmake'
