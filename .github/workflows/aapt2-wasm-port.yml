@@ -1,0 +1,38 @@
+name: Portage AAPT2 original vers WebAssembly (expérimental)
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'ci/build-aapt2-emscripten.sh'
+      - 'ci/patch-aapt2-emscripten.py'
+      - 'ci/verify-real-aapt2-wasm.mjs'
+      - '.github/workflows/aapt2-wasm-port.yml'
+permissions:
+  contents: read
+concurrency:
+  group: aapt2-wasm-port
+  cancel-in-progress: true
+jobs:
+  build-aapt2-webassembly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Sources publiques uniquement
+        uses: actions/checkout@v5
+      - name: Installer Emscripten WebAssembly
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '4.0.15'
+      - name: Installer protoc, CMake et Ninja
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler cmake ninja-build pkg-config python3
+      - name: Compiler le véritable AAPT2 C++ avec Emscripten
+        run: bash ci/build-aapt2-emscripten.sh
+      - name: Distribuer uniquement un binaire réellement exécuté
+        uses: actions/upload-artifact@v4
+        with:
+          name: aapt2-wasm-authentique-verifie
+          path: ci/build/aapt2-web/
+          if-no-files-found: error
+          retention-days: 14
