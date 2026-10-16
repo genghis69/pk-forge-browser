@@ -156,8 +156,27 @@ for lib in ("libincfs", "libselinux", "libsepol",
         raise RuntimeError("Missing upstream CMake include: " + old_include)
     glue = glue.replace(old_include,
         "if(NOT EMSCRIPTEN)\n    " + old_include + "\nendif()", 1)
+
+# Asset.cpp genuinely uses IncFsFileMap to access ordinary mapped APK
+# resources. Preserve the upstream implementation for the non-Android path,
+# instead of disabling unresolved symbols or inventing fake methods.
+# The Linux kernel incfs device service remains omitted.
+glue += """
+if(EMSCRIPTEN)
+    add_library(libincfs STATIC
+        ${SRC}/incremental_delivery/incfs/util/map_ptr.cpp
+    )
+    target_include_directories(libincfs PRIVATE
+        ${SRC}/incremental_delivery/incfs/include
+        ${SRC}/incremental_delivery/incfs/util/include
+        ${SRC}/libbase/include
+        ${SRC}/core/libutils/include
+        ${SRC}/logging/liblog/include
+    )
+endif()
+"""
 glue_file.write_text(glue)
-for lib in ("libincfs", "libselinux", "libsepol", "libpackagelistparser"):
+for lib in ("libselinux", "libsepol", "libpackagelistparser"):
     old_link = "    " + lib + "\n"
     if old_link not in text:
         raise RuntimeError("Missing upstream AAPT2 dependency: " + lib)
