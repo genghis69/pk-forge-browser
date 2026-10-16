@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {resourceBlockers,linkedRCode,normalizedManifest} from '../src/real-resources.mjs';
 test('ELM327 layouts, XML drawable and styles are not silently treated as AAPT2 output',()=>{
  const errs=resourceBlockers({resourcePaths:[
@@ -32,4 +33,10 @@ test('Compatible resource subset excludes unsupported theme, layout and qualifie
  const errs=resourceBlockers({resourcePaths:['x/app/src/main/res/values/strings.xml','x/app/src/main/res/drawable/logo.png','x/app/src/main/res/xml/wear.xml'],
  manifest:'<manifest><application android:label="@string/app_name"/></manifest>',sourceTexts:['R.string.app_name']});
  assert.deepEqual(errs,[]);
+});
+
+test('Bouton final contrôlé par la provenance exacte du ZIP et du R',()=>{
+ const source=readFileSync('src/real-resources.mjs','utf8');
+ assert.match(source,/export function refreshApkButton/);
+ assert.match(source,/artifact\?\.linkedResourceSession===session/);
 });

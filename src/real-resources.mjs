@@ -95,6 +95,10 @@ async function engine(){
   throw Error('Google Pack WASM doit être reconstruit avec les extensions APK Forge.');
  wasm=m;return m;
 }
+export function refreshApkButton(sourceZip,artifact){
+ const button=$('realApkAssemble');
+ if(button)button.disabled=!(sourceZip&&session?.zip===sourceZip&&artifact?.linkedResourceSession===session&&artifact.runtimeZip);
+}
 export function getResourceSession(project){
  return project?.zip&&session?.zip===project.zip?session:null;
 }
@@ -144,6 +148,7 @@ export async function prepareRealResources(project){
   if(bytes[0]!==magic||bytes[1]!==0)throw Error('En-tête binaire invalide pour '+name);
  }
  session={zip:project.zip,project,ids,input,sourceTexts,namespace:data.namespace!=='Non précisé'?data.namespace:data.packageName};
+ refreshApkButton(project.zip,null);
  info('Ressources compilées : manifeste binaire, resources.arsc, '+Object.keys(ids).length+' identifiants Android réels.');
  info('Il faut maintenant RECOMPILER Kotlin avec ces identifiants avant la fusion D8.');
  return session;
