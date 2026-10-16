@@ -22,6 +22,8 @@ jobs:
         run: |
           node --check src/app.mjs
           node --check src/android-compiler.mjs
+          node --check src/runtime-dex.mjs
+          node --test tests/runtime-dex.test.mjs
           node --check src/android-sources.mjs
           node --test tests/android-sources.test.mjs
           node --check src/crypto.mjs
