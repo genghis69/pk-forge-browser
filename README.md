@@ -11,7 +11,7 @@ Compilateur expérimental **dans le navigateur** utilisant [Google Pack](https:/
 
 Le workflow `.github/workflows/build-wasm.yml` compile Google Pack au premier push et publie un ZIP nommé `apk-forge-browser-avec-wasm` dans les Artifacts de GitHub Actions.
 
-Pour l'hébergement automatique, dans **Settings > Pages > Build and deployment > Source**, sélectionner **GitHub Actions**. La tâche `deploy` tentera alors de publier le site à https://genghis69.github.io/pk-forge-browser/.
+Pour l'hébergement automatique, dans **Settings > Pages > Build and deployment > Source**, sélectionner **GitHub Actions**. Sans cette activation, la compilation réussit désormais et produit l'archive ZIP, mais saute la publication. Après activation, chaque nouveau push publie automatiquement le site à https://genghis69.github.io/pk-forge-browser/.
 
 S'il reste une erreur de déploiement Pages, les Artifacts du job `build` permettent quand même de récupérer le site compilé (HTML+JS+WASM).
 

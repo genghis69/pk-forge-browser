@@ -13,6 +13,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
     steps:
       - name: Récupérer APK Forge Browser
         uses: actions/checkout@v5
@@ -64,14 +66,29 @@ jobs:
           name: apk-forge-browser-avec-wasm
           path: dist/
           retention-days: 30
+      - name: Détecter si GitHub Pages est activé
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages disponible : préparation du déploiement."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Le WASM est compilé et téléchargeable dans les Artifacts. Active GitHub Pages dans Settings > Pages > Source: GitHub Actions pour la publication automatique."
+          fi
       - name: Configurer GitHub Pages
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/configure-pages@v5
       - name: Préparer le site pour GitHub Pages
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/
   deploy:
     needs: build
+    if: needs.build.outputs.pages_enabled == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
