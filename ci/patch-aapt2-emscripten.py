@@ -169,6 +169,7 @@ for name, suffixes in {
         "/ashmem-dev.cpp", "/uevent.cpp", "/qtaguid.cpp",
         "/android_reboot.cpp", "/klog.cpp", "/trace-dev.cpp",
         "/partition_utils.cpp",
+        "/fs_config.cpp", "/canned_fs_config.cpp",
     ),
     "libutils.cmake": ("/Looper.cpp", "/Threads.cpp", "/Trace.cpp"),
     "libziparchive.cmake": ("/incfs_support/signal_handling.cpp",),
@@ -182,6 +183,105 @@ for name, suffixes in {
             raise RuntimeError("Unexpected native-only source " + suffix + " in " + name)
         contents = contents.replace(lines[0], "", 1)
     path.write_text(contents)
+
+
+# Portable POSIX retry helper for Android logging sources under musl.
+# Normal host libc may define this, but browser-compiled musl does not.
+compat_header = source / "ci-aapt2-compat.h"
+compat_header.write_text(
+    "#pragma once\n"
+    "#if defined(__EMSCRIPTEN__)\n"
+    "#include <errno.h>\n"
+    "#ifndef TEMP_FAILURE_RETRY\n"
+    "#define TEMP_FAILURE_RETRY(expr) ({ __typeof__(expr) _aapt2_ret; "
+    "do { _aapt2_ret = (expr); } "
+    "while (_aapt2_ret == -1 && errno == EINTR); _aapt2_ret; })\n"
+    "#endif\n"
+    "#endif\n"
+)
+
+# This AOSP branch sometimes assumes that std::string_view::iterator is
+# exactly const char*. The libc++ used by Emscripten correctly wraps it in
+# __wrap_iter. Patch *only* the known incompatible expressions, preserving
+# sizes and original parsing algorithms; std::to_address gives the real ptr.
+aapt2_src = source / "submodules/base/tools/aapt2"
+string_iterator_patches = {
+    "configuration/ConfigurationParser.cpp": [
+        ("std::string{apk_name.begin(), end_index}",
+         "std::string{apk_name.data(), end_index}"),
+    ],
+    "link/ManifestFixer.cpp": [
+        ("const char* startChar = attr_value.begin();",
+         "const char* startChar = attr_value.data();"),
+    ],
+    "text/Printer.cpp": [
+        ("StringPiece str_to_copy(remaining_str_begin, new_line_iter - remaining_str_begin)",
+         "StringPiece str_to_copy(std::to_address(remaining_str_begin), new_line_iter - remaining_str_begin)"),
+    ],
+    "util/Files.cpp": [
+        ("const char* start = path.begin();", "const char* start = path.data();"),
+        ("const char* end = path.end();", "const char* end = path.data() + path.size();"),
+        ("const char* last_dir_sep = path.begin();",
+         "const char* last_dir_sep = path.data();"),
+        ("for (const char* c = path.begin();", "for (const char* c = path.data();"),
+        ("const char* const end = filename.end();",
+         "const char* const end = filename.data() + filename.size();"),
+        ("std::find(filename.begin(), end, '.')", "std::find(filename.data(), end, '.')"),
+    ],
+    "util/Util.cpp": [
+        ("const char* c = str.begin();", "const char* c = str.data();"),
+        ("const char* const end = str.end();",
+         "const char* const end = str.data() + str.size();"),
+        ("const char* start = token_.end();",
+         "const char* start = token_.data() + token_.size();"),
+        ("const char* end = str_.end();",
+         "const char* end = str_.data() + str_.size();"),
+        ("StringPiece(token_.end(), 0)",
+         "StringPiece(token_.data() + token_.size(), 0)"),
+        ("StringPiece(str.begin() - 1, 0)",
+         "StringPiece(str.data() - 1, 0)"),
+        ("StringPiece(str.end(), 0)",
+         "StringPiece(str.data() + str.size(), 0)"),
+        ("StringPiece(iter, path.end() - iter)",
+         "StringPiece(std::to_address(iter), path.end() - iter)"),
+        ("StringPiece(last_occurence + 1, iter - last_occurence - 1)",
+         "StringPiece(std::to_address(last_occurence + 1), iter - last_occurence - 1)"),
+        ("StringPiece(path.begin(), last_occurence - path.begin() + 1)",
+         "StringPiece(path.data(), last_occurence - path.begin() + 1)"),
+    ],
+    "Resource.cpp": [
+        ("android::StringPiece(s.begin(), dot - s.begin())",
+         "android::StringPiece(s.data(), dot - s.begin())"),
+    ],
+    "ResourceUtils.cpp": [
+        ("StringPiece(begin, codename_end - begin)",
+         "StringPiece(std::to_address(begin), codename_end - begin)"),
+    ],
+}
+string_iterator_patches["__androidfw__/Util.cpp"] = [
+    ("StringPiece(start, current - start)",
+     "StringPiece(std::to_address(start), current - start)"),
+]
+for relative, replacements in string_iterator_patches.items():
+    path = (
+        source / "submodules/base/libs/androidfw/Util.cpp"
+        if relative.startswith("__androidfw__/")
+        else aapt2_src / relative
+    )
+    contents = path.read_text()
+    for old, new in replacements:
+        count = contents.count(old)
+        if count < 1:
+            raise RuntimeError(f"Missing precise iterator fix ({old}) in {relative}")
+        # Only repeated exact statement is expected for 'const char* end = path.end()'
+        # and must be handled on all occurrences with the same type.
+        if count != 1 and old != "const char* end = path.end();":
+            raise RuntimeError(f"Ambiguous iterator fix ({old}) in {relative}: {count}")
+        contents = contents.replace(old, new)
+    if "std::to_address(" in contents and "#include <memory>" not in contents:
+        contents = "#include <memory>\n" + contents
+    path.write_text(contents)
+print("Patched", len(string_iterator_patches), "C++ sources for libc++ string_view iterators.")
 
 cmake.write_text(text)
 print("Patched isolated AOSP AAPT2 sources for Emscripten, including Bionic configuration header.")

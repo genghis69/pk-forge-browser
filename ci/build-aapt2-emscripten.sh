@@ -25,8 +25,8 @@ emcmake cmake -S "$SRC" -B "$OUT" -GNinja \
   -DPNG_SHARED=OFF \
   -DOPENSSL_NO_ASM=ON \
   -DBUILD_SHARED_LIBS=OFF \
-  -DCMAKE_C_FLAGS="-sUSE_ZLIB=1" \
-  -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1 -DFMT_USE_CONSTEVAL=0"
+  -DCMAKE_C_FLAGS="-sUSE_ZLIB=1 -include $SRC/ci-aapt2-compat.h" \
+  -DCMAKE_CXX_FLAGS="-sUSE_ZLIB=1 -DFMT_USE_CONSTEVAL=0 -include $SRC/ci-aapt2-compat.h"
 # Continue unrelated Ninja compilation units to collect all wasm compatibility errors in one run.
 emmake cmake --build "$OUT" --target aapt2 --parallel 4 -- -k 0
 WASM_JS="$(find "$OUT" -type f -name aapt2.js -print -quit)"
