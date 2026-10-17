@@ -58,9 +58,15 @@ export function resolveTrainManagerAds(analysis,catalog){
 }
 
 /** Defense in depth: no DEX/archive caller may assemble an ads APK yet. */
-export function assertNoUnmergedAdsApk(analysis){
+export function assertNoUnmergedAdsApk(analysis,linkedResourceSession=null){
  const coordinates=analysis?.dependencies??[];
- if(coordinates.some(x=>/^com\.applovin:|^com\.google\.android\.gms:play-services-ads-identifier:/.test(x)))
-  throw Error('APK publicitaire refusé : les manifestes, ressources Android, R, assets et bibliothèques natives AAR ne sont pas encore fusionnés dans Chrome.');
+ const ads=coordinates.some(x=>/^com\.applovin:|^com\.google\.android\.gms:play-services-ads-identifier:/.test(x));
+ if(!ads)return true;
+ const session=linkedResourceSession,merge=session?.aarState;
+ if(session?.engine!=='aapt2-wasm'||!merge?.aarReady||
+    merge.aarRCompiled!==true||!Array.isArray(merge.libs)||
+    !Array.isArray(merge.packages)||!Array.isArray(merge.extraFiles)||
+    merge.libs.length<2)
+  throw Error('APK publicitaire refusé : fusion AAR non complètement validée (manifestes, AAPT2, R, assets et JNI).');
  return true;
 }
