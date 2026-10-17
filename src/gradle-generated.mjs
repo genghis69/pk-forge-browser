@@ -41,16 +41,16 @@ export function createGradleBuildConfig(analysis,settings){
   throw Error('versionCode Gradle invalide.');
  if(!/^[A-Za-z0-9._-]+$/.test(analysis.version||''))
   throw Error('versionName Gradle invalide.');
- return \`package \${settings.namespace};
+ return `package ${settings.namespace};
 public final class BuildConfig {
  private BuildConfig() {}
  public static final boolean DEBUG = true;
- public static final String APPLICATION_ID = \${stringValue(appId)};
+ public static final String APPLICATION_ID = ${stringValue(appId)};
  public static final String BUILD_TYPE = "debug";
- public static final int VERSION_CODE = \${Number(analysis.versionCode)};
- public static final String VERSION_NAME = \${stringValue(analysis.version)};
+ public static final int VERSION_CODE = ${Number(analysis.versionCode)};
+ public static final String VERSION_NAME = ${stringValue(analysis.version)};
  public static final String MAX_SDK_KEY = "";
  public static final String MAX_REWARDED_AD_UNIT_ID = "";
 }
-\`;
+`;
 }
