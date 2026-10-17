@@ -24,5 +24,5 @@ test('TrainManager : remplace le placeholder Gradle maxSdkKey sans modifier les 
 test('Rejette un placeholder ou un champ BuildConfig non interprété',()=>{
  const config=extractGradleBuildSettings(gradle,info);
  assert.throws(()=>config.manifestPlaceholder('<manifest package="\${otherKey}"/>'),/inconnu/);
- assert.throws(()=>extractGradleBuildSettings(gradle+"\\nbuildConfigField 'int', 'ADMIN', 1",info),/BuildConfig/);
+ assert.throws(()=>extractGradleBuildSettings(gradle+"\nbuildConfigField 'int', 'ADMIN', 1",info),/BuildConfig/);
 });
