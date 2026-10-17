@@ -39,6 +39,7 @@ jobs:
           node --check src/aar-merge.mjs
           node --test tests/aar-merge.test.mjs
           node --check ci/verify-aar-manifests.mjs
+          node --check ci/verify-aar-aapt2.mjs
           node --check src/ads-runtime-dex.mjs
           node --test tests/ads-runtime-dex.test.mjs
           node --check src/gradle-generated.mjs
@@ -394,6 +395,12 @@ jobs:
             --auto-add-overlay \
             -R ci/build/aapt2-compiled.zip
           node ci/test-aapt2-link.mjs --verify
+      - name: Valider AAPT2 sur toutes les ressources des AAR Maven authentiques
+        run: |
+          set -euo pipefail
+          node ci/verify-aar-aapt2.mjs
+          test -s ci/build/aapt2-real-aars/merged-library-resources.apk
+          test -s ci/build/aapt2-real-aars/merged-R.txt
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
         run: |
           set -euo pipefail
