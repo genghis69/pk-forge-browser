@@ -11,6 +11,7 @@ import {compileAapt2Wasm} from './aapt2-wasm.mjs';
 import {inspectSignedApk} from './apk-structure.mjs';
 import {assertApkLaunchClasses,definedDexClasses} from './apk-launch-check.mjs';
 import {verifyDexIntegrity,assertManifestProvidersPresent} from './dex-integrity.mjs';
+import {extractGradleBuildSettings} from './gradle-generated.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -124,7 +125,14 @@ export async function prepareRealResources(project){
  const sourceTexts=await Promise.all(sourceFiles.map(x=>project.files[x].async('string')));
  // AAPT2 receives original XML/layout/styles and android.jar inside the browser.
  // If no real WASM executable is deployed, only the explicit Google Pack subset remains.
- const manifest=normalizedManifest(xml,data);
+ let sourceManifest=xml;
+ if(data.java>0 && data.appGradlePath && project.files[data.appGradlePath]){
+  const appGradle=await project.files[data.appGradlePath].async('string');
+  const config=extractGradleBuildSettings(appGradle,data);
+  sourceManifest=config.manifestPlaceholder(sourceManifest);
+  info('Manifest Gradle : maxSdkKey résolu localement (vide sans identifiants AppLovin).');
+ }
+ const manifest=normalizedManifest(sourceManifest,data);
  const aapt2=await compileAapt2Wasm({project,manifest,resourcePaths});
  if(aapt2){
   const namespace=data.namespace!=='Non précisé'?data.namespace:data.packageName;

@@ -3,6 +3,7 @@
  */
 import {compileProfile,generateCompileOnlyR,buildDiagnostic} from './android-sources.mjs';
 import {javaCompileProfile,realJavaR} from './java-sources.mjs';
+import {extractGradleBuildSettings,createGradleBuildConfig} from './gradle-generated.mjs';
 import {mountJar,virtualJarPath} from './jvm-artifacts.mjs';
 import {toolchainUrl} from './toolchain-paths.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
@@ -356,6 +357,12 @@ async function buildJavaGroup(project){
  const rCode=realJavaR(profile.namespace,linkedSession.ids);
  cheerpOSAddStringFile('/str/R.java',rCode);
  mountedSources.push('/str/R.java');
+ const appGradle=await project.files[project.analysis.appGradlePath]?.async('string');
+ const generatedSettings=extractGradleBuildSettings(appGradle,project.analysis);
+ const buildConfig=createGradleBuildConfig(project.analysis,generatedSettings);
+ cheerpOSAddStringFile('/str/BuildConfig.java',buildConfig);
+ mountedSources.push('/str/BuildConfig.java');
+ log('BuildConfig Java 17 généré localement : identifiants MAX vides comme dans le ZIP sans local.properties.');
  const cp=classpath.filter(x=>x.kind==='platform'||x.kind==='dependency').map(x=>x.path).join(':');
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
  const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(

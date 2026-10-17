@@ -28,6 +28,8 @@ jobs:
           node --check src/app.mjs
           node --check src/android-compiler.mjs
           node --check src/java-sources.mjs
+          node --check src/gradle-generated.mjs
+          node --test tests/gradle-generated.test.mjs
           node --test tests/java-sources.test.mjs
           node --check src/real-resources.mjs
           node --check src/aapt2-diagnostics.mjs
