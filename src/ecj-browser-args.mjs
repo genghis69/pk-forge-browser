@@ -1,10 +1,10 @@
 /**
- * ECJ is executed on CheerpJ Java 17, whose java.home (/lt/17) is a
- * virtual runtime, NOT a standard host JDK image with jrt:/ modules.
- * Never ask ECJ to discover that virtual directory as system libraries.
+ * Inputs to the real Eclipse JDT Compiler API adapter, NOT ECJ batch.Main.
+ * ECJ batch.Main probes CheerpJ java.home (/lt/17) for JDK system modules,
+ * but that location is a virtual runtime, not a JDK installation.
  *
- * Android.jar is the real API/Java stubs supplied by the Android SDK.
- * Keep Java language/bytecode level 17; do not silently downgrade to 8.
+ * The adapter uses ECJ 3.43.0 Compiler + FileSystem directly and is pinned to
+ * Java 17. The supplied Android and Maven JARs are never replaced by stubs.
  */
 export function ecjAndroidArguments({androidJar,classpath,outputDir,sources}){
  const allowed=p=>typeof p==='string'&&/^(?:\/str\/|\/files\/)[^\s:]+$/.test(p)&&!p.split('/').includes('..');
@@ -18,13 +18,5 @@ export function ecjAndroidArguments({androidJar,classpath,outputDir,sources}){
  if(!Array.isArray(sources)||!sources.length||!sources.every(s=>allowed(s)&&s.endsWith('.java')))
   throw Error('ECJ : fichiers Java invalides ou absents.');
  if(new Set(sources).size!==sources.length)throw Error('ECJ : fichiers source dupliqués.');
- return [
-  '-17',
-  '-proc:none',
-  '--system','none',
-  '-encoding','UTF-8',
-  '-classpath',classpath.join(':'),
-  '-d',outputDir,
-  ...sources
- ];
+ return [outputDir,classpath.join(':'),...sources];
 }
