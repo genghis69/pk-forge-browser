@@ -27,9 +27,8 @@ if(!Array.isArray(adsResolved.artifacts)||adsResolved.artifacts.length<2)
  throw Error('TrainManager ads dependencies unresolved');
 if(!Array.isArray(adsResolved.jarArtifacts)||adsResolved.jarArtifacts.length<2)
  throw Error('Authentic AppLovin / Google Ads JVM classpath missing');
-const adsJarDir=path.join(root,'deps/trainmanager-ads-v1/jars');
 const jarArtifacts=adsResolved.jarArtifacts.map(jar=>{
- if(!/^[A-Za-z0-9_.-]+\\.jar$/.test(jar.name)||
+ if(!/^[A-Za-z0-9_.-]+\.jar$/.test(jar.name)||
     !jar.group||!jar.module||!jar.version)
   throw Error('Invalid ads JAR metadata: '+jar.name);
  const relative='deps/trainmanager-ads-v1/jars/'+jar.name;
