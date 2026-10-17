@@ -357,6 +357,14 @@ async function buildJavaGroup(project){
   expectedSize:javaCompiler.size,sha256:javaCompiler.sha256,moduleUrl,
   fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
  });
+ const adapter=javaCompiler.adapter;
+ if(!adapter?.relative||!adapter.sha256||!adapter.size)
+  throw Error('Compilateur Java : pont ECJ Java 17 sans JDK virtuel absent du catalogue.');
+ const ecjApiTool=await mountJar({
+  relative:adapter.relative,filename:adapter.name,
+  expectedSize:adapter.size,sha256:adapter.sha256,moduleUrl,
+  fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+ });
  const runId=Date.now().toString(36);
  const compiled='/files/apkforge-java/classes-'+runId;
  const Paths=await runtime.library.java.nio.file.Paths;
@@ -383,9 +391,9 @@ async function buildJavaGroup(project){
  const ecjArgs=ecjAndroidArguments({androidJar:jarRoot.path,
   classpath:javaPaths,outputDir:compiled,sources:mountedSources});
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
- log('ECJ : modules système de CheerpJ /lt/17 désactivés (--system none). SDK Android 36 utilisé comme bibliothèque de compilation.');
+ log('ECJ API Java 17 : utilisation de Compiler + FileSystem avec les vrais JAR Android/Maven. Aucun balayage du JDK virtuel /lt/17.');
  const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(
-  'org.eclipse.jdt.internal.compiler.batch.Main',ecj,...ecjArgs));
+  'dev.apkforge.tools.ApkForgeEcjCompiler',ecj+':'+ecjApiTool,...ecjArgs));
  if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+
   '). Consulte les erreurs ECJ détaillées dans la console F12 (sans ajouter de classes factices).');
  const jarPath='/files/apkforge-java/java-compiled-'+runId+'.jar';
