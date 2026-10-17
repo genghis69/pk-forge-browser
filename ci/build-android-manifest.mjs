@@ -25,6 +25,22 @@ if(!fs.existsSync(adsCatalogPath))throw Error('TrainManager ads Maven catalog mi
 const adsResolved=JSON.parse(fs.readFileSync(adsCatalogPath,'utf8'));
 if(!Array.isArray(adsResolved.artifacts)||adsResolved.artifacts.length<2)
  throw Error('TrainManager ads dependencies unresolved');
+if(!Array.isArray(adsResolved.jarArtifacts)||adsResolved.jarArtifacts.length<2)
+ throw Error('Authentic AppLovin / Google Ads JVM classpath missing');
+const adsJarDir=path.join(root,'deps/trainmanager-ads-v1/jars');
+const jarArtifacts=adsResolved.jarArtifacts.map(jar=>{
+ if(!/^[A-Za-z0-9_.-]+\\.jar$/.test(jar.name)||
+    !jar.group||!jar.module||!jar.version)
+  throw Error('Invalid ads JAR metadata: '+jar.name);
+ const relative='deps/trainmanager-ads-v1/jars/'+jar.name;
+ const file=path.join(root,relative);
+ if(!fs.existsSync(file)||!fs.statSync(file).isFile())
+  throw Error('Published ad SDK JAR missing: '+relative);
+ const actual=checksum(file);
+ if(actual.size!==jar.size||actual.sha256!==jar.sha256)
+  throw Error('Ad SDK JAR SHA256 mismatch: '+relative);
+ return {...jar,relative};
+});
 const trainManagerAds={
   requested:adsResolved.requested,
   selectedAppLovin:adsResolved.artifacts.find(a=>a.group==='com.applovin'&&a.name==='applovin-sdk')?.version,
@@ -33,6 +49,7 @@ const trainManagerAds={
   aarResources:adsResolved.artifacts.reduce((n,a)=>n+(a.resourceCount||0),0),
   aarNative:adsResolved.artifacts.reduce((n,a)=>n+(a.nativeCount||0),0),
   aarAssets:adsResolved.artifacts.reduce((n,a)=>n+(a.assetsCount||0),0),
+  jarArtifacts,
   // Public SDK binaries are downloaded and hashed, but an APK also needs
   // Android library manifest/resource/asset merging and library R.java.
   manifestResourceMergeSupported:false
