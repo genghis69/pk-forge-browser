@@ -29,7 +29,7 @@ for(const aar of index.artifacts.filter(x=>x.extension==='aar')){
 const p='ci/build/aapt2-src/res';
 const paths=['values/strings.xml','values/styles.xml','layout/activity_main.xml','drawable/panel.xml'];
 const projectFiles=Object.fromEntries(paths.map(name=>[
- p+'/'+name,{async:async type=>{
+ 'src/main/res/'+name,{async:async type=>{
   if(type!=='uint8array')throw Error('Unexpected resource encoding');
   return new Uint8Array(fs.readFileSync(p+'/'+name));
  }}]));
