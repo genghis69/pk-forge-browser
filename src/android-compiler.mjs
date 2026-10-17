@@ -3,6 +3,7 @@
  */
 import {compileProfile,generateCompileOnlyR,buildDiagnostic} from './android-sources.mjs';
 import {javaCompileProfile,realJavaR} from './java-sources.mjs';
+import {ecjAndroidArguments} from './ecj-browser-args.mjs';
 import {extractGradleBuildSettings,createGradleBuildConfig} from './gradle-generated.mjs';
 import {mountJar,virtualJarPath} from './jvm-artifacts.mjs';
 import {toolchainUrl} from './toolchain-paths.mjs';
@@ -377,13 +378,16 @@ async function buildJavaGroup(project){
  cheerpOSAddStringFile('/str/BuildConfig.java',buildConfig);
  mountedSources.push('/str/BuildConfig.java');
  log('BuildConfig Java 17 généré localement : identifiants MAX vides comme dans le ZIP sans local.properties.');
- const cp=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
-  ...adsClasspath].map(x=>x.path).join(':');
+ const javaPaths=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
+  ...adsClasspath].map(x=>x.path);
+ const ecjArgs=ecjAndroidArguments({androidJar:jarRoot.path,
+  classpath:javaPaths,outputDir:compiled,sources:mountedSources});
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
+ log('ECJ : modules système de CheerpJ /lt/17 désactivés (--system none). SDK Android 36 utilisé comme bibliothèque de compilation.');
  const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(
-  'org.eclipse.jdt.internal.compiler.batch.Main',ecj,
-  '-17','-proc:none','-classpath',cp,'-d',compiled,...mountedSources));
- if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+'). Vérifie les imports Android et les dépendances du projet dans F12.');
+  'org.eclipse.jdt.internal.compiler.batch.Main',ecj,...ecjArgs));
+ if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+
+  '). Consulte les erreurs ECJ détaillées dans la console F12 (sans ajouter de classes factices).');
  const jarPath='/files/apkforge-java/java-compiled-'+runId+'.jar';
  const jarRet=await observedJavaExecution('Assemblage des classes Java',()=>cheerpjRunMain(
   'dev.apkforge.tools.BuildClassesJar',tool.path,compiled,jarPath));
