@@ -158,7 +158,7 @@ pub fn apkforge_sign_linked_apk(
     let dex: Vec<String> = from_value(dex_payloads).map_err(|e| e.to_string())?;
     let keys = Keys::from_combined_pem_string(&combined_pem_string)
         .map_err(|e| format!("Signing key: {e:?}"))?;
-    sign_linked_apk_with_dex(&unsigned, &dex, &keys)
+    sign_linked_apk_with_dex(&unsigned, &dex, &[], &keys)
 }
 /** Inject verified Maven AAR assets/JNI into the resource APK BEFORE v2/v3 signing. */
 #[wasm_bindgen]
