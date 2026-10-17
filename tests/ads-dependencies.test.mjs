@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveTrainManagerAds,TRAINMANAGER_ADS_COORDINATES} from '../src/ads-dependencies.mjs';
+import {resolveTrainManagerAds,TRAINMANAGER_ADS_COORDINATES,assertNoUnmergedAdsApk} from '../src/ads-dependencies.mjs';
 
 const jar=(group,module,name)=>({
  group,module,version:group==='com.applovin'?'13.6.4':'18.2.0',
@@ -36,4 +36,10 @@ test('Refuse un catalogue incomplet ou des empreintes non vérifiables',()=>{
 test('Refuse une dépendance publicitaire partielle',()=>{
  assert.throws(()=>resolveTrainManagerAds({dependencies:analysis.dependencies.slice(0,1)},
   {trainManagerAds:ads}),/partielles/);
+});
+
+test('L’assembleur refuse tout SDK Ads même en cas de DEX injectés',()=>{
+ assert.throws(()=>assertNoUnmergedAdsApk(analysis),/APK publicitaire refusé/);
+ assert.throws(()=>assertNoUnmergedAdsApk({dependencies:[TRAINMANAGER_ADS_COORDINATES[0]]}),/refusé/);
+ assert.equal(assertNoUnmergedAdsApk({dependencies:[]}),true);
 });
