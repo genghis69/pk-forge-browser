@@ -29,8 +29,22 @@ test('Le compilateur Java doit exclure les sources Kotlin et les classes hors mo
  assert.deepEqual(javaSourcePaths(base),base.javaPaths);
 });
 
-test('Signale la fusion AAR encore nécessaire, sans prétendre que le SDK est absent',()=>{
+test('TrainManager : échoue si les vraies classes Maven ne sont pas publiées',()=>{
  const analysis={...base,dependencies:['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0']};
  const sdk={...catalog,trainManagerAds:{selectedAppLovin:'13.6.4',artifacts:27,aars:21,aarResources:503,manifestResourceMergeSupported:false}};
- assert.throws(()=>javaCompileProfile(analysis,sdk),/fusion des manifestes, ressources et R des AAR/);
+ assert.throws(()=>javaCompileProfile(analysis,sdk),/JAR issus des AAR Maven/);
+});
+test('TrainManager : vrais SDK autorisés pour ECJ, APK strictement suspendu',()=>{
+ const analysis={...base,dependencies:['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0']};
+ const make=(group,module,name)=>({group,module,name,version:group==='com.applovin'?'13.6.4':'18.2.0',
+  relative:'deps/trainmanager-ads-v1/jars/'+name,size:1000,sha256:'a'.repeat(64)});
+ const sdk={...catalog,trainManagerAds:{selectedAppLovin:'13.6.4',aars:21,aarResources:503,
+  manifestResourceMergeSupported:false,jarArtifacts:[
+   make('com.applovin','applovin-sdk','com.applovin-applovin-sdk-13.6.4-classes.jar'),
+   make('com.google.android.gms','play-services-ads-identifier','com.google.android.gms-play-services-ads-identifier-18.2.0-classes.jar')
+  ]}};
+ const profile=javaCompileProfile(analysis,sdk);
+ assert.equal(profile.adsClasspath.length,2);
+ assert.match(profile.apkBlockedReason,/APK suspendu/);
+ assert.equal(profile.paths.length,2);
 });
