@@ -32,7 +32,7 @@ export function javaCompileProfile(analysis,catalog){
  if(adsProfile){
   const ads=catalog.trainManagerAds;
   if(!ads||!ads.selectedAppLovin)
-   throw Error('Dépendances MAX/GMS non résolues dans le catalogue Maven publié.');
+   throw Error('Dépendances AppLovin et com.google.android.gms:play-services-ads-identifier non résolues dans le catalogue Maven publié.');
   if(ads.manifestResourceMergeSupported!==true)
    throw Error('AppLovin MAX '+ads.selectedAppLovin+' et Google Ads sont maintenant résolus ('+
     ads.artifacts+' artefacts Maven dont '+ads.aars+' AAR et '+ads.aarResources+
