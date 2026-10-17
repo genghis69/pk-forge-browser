@@ -65,7 +65,7 @@ pub fn apkforge_resource_ids(data: JsValue) -> Result<JsValue, String> {
     }
     to_value(&out).map_err(|e| e.to_string())
 }
-fn sign_linked_apk_with_dex(unsigned_apk: &[u8], dex: &[String], keys: &Keys) -> Result<String, String> {
+fn sign_linked_apk_with_dex(unsigned_apk: &[u8], dex: &[String], extra: &[(String, String)], keys: &Keys) -> Result<String, String> {
     if dex.is_empty() || dex.len() > 40 { return Err("Invalid DEX count".into()); }
     if unsigned_apk.len() > 100_000_000 { return Err("Resource APK exceeds 100 MB".into()); }
     let mut archive = ZipArchive::new(Cursor::new(unsigned_apk)).map_err(|e| e.to_string())?;
@@ -112,6 +112,25 @@ fn sign_linked_apk_with_dex(unsigned_apk: &[u8], dex: &[String], keys: &Keys) ->
         let path = if idx == 0 { "classes.dex".into() } else { format!("classes{}.dex", idx + 1) };
         files.push(pack_zip::File { path, data: bytes });
     }
+    // Asset and native-library bytes belong INSIDE the ZIP before the APK
+    // signing block is calculated; modifying a signed APK would break v2/v3.
+    if extra.len() > 500 { return Err("Too many AAR extra files".into()); }
+    let mut extra_total = 0usize;
+    for (path, contents_b64) in extra {
+        if path.starts_with('/') || path.contains('\\') ||
+           path.split('/').any(|s| s.is_empty() || s == "." || s == "..") ||
+           !(path.starts_with("assets/") || path.starts_with("lib/")) ||
+           (path.starts_with("lib/") && !(path.ends_with(".so") &&
+             ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"]
+                .iter().any(|abi| path.starts_with(&format!("lib/{abi}/"))))) ||
+           !seen.insert(path.clone()) {
+            return Err(format!("Unsafe/duplicate AAR asset or JNI path: {path}"));
+        }
+        let data = decode(contents_b64)?;
+        extra_total = extra_total.checked_add(data.len()).ok_or("Extra file size overflow")?;
+        if extra_total > 100_000_000 { return Err("AAR assets/JNI exceed 100 MB".into()); }
+        files.push(pack_zip::File { path: path.clone(), data });
+    }
     let mut unsigned = Vec::new();
     pack_zip::zip_apk(&files, Cursor::new(&mut unsigned))
         .map_err(|e| format!("ZIP alignment: {e:?}"))?;
@@ -127,7 +146,7 @@ pub fn apkforge_sign_with_dex(input: JsValue, dex_payloads: JsValue) -> Result<S
     let keys = Keys::from_combined_pem_string(&input.combined_pem_string)
         .map_err(|e| format!("Signing key: {e:?}"))?;
     let unsigned = compile_apk(&pkg).map_err(|e| format!("Resource compiler: {e:?}"))?;
-    sign_linked_apk_with_dex(&unsigned, &dex, &keys)
+    sign_linked_apk_with_dex(&unsigned, &dex, &[], &keys)
 }
 #[wasm_bindgen]
 pub fn apkforge_sign_linked_apk(
@@ -139,5 +158,20 @@ pub fn apkforge_sign_linked_apk(
     let dex: Vec<String> = from_value(dex_payloads).map_err(|e| e.to_string())?;
     let keys = Keys::from_combined_pem_string(&combined_pem_string)
         .map_err(|e| format!("Signing key: {e:?}"))?;
-    sign_linked_apk_with_dex(&unsigned, &dex, &keys)
+    sign_linked_apk_with_dex(&unsigned, &dex, &[], &keys)
+}
+/** Inject verified Maven AAR assets/JNI into the resource APK BEFORE v2/v3 signing. */
+#[wasm_bindgen]
+pub fn apkforge_sign_linked_apk_with_extra(
+    aapt2_linked_apk_b64: String,
+    dex_payloads: JsValue,
+    extra_payloads: JsValue,
+    combined_pem_string: String,
+) -> Result<String, String> {
+    let unsigned = decode(&aapt2_linked_apk_b64)?;
+    let dex: Vec<String> = from_value(dex_payloads).map_err(|e| e.to_string())?;
+    let extra: Vec<(String, String)> = from_value(extra_payloads).map_err(|e| e.to_string())?;
+    let keys = Keys::from_combined_pem_string(&combined_pem_string)
+        .map_err(|e| format!("Signing key: {e:?}"))?;
+    sign_linked_apk_with_dex(&unsigned, &dex, &extra, &keys)
 }

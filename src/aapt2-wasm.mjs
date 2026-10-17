@@ -88,7 +88,7 @@ async function availableModule(moduleUrl,fetchFn){
  }).then(assertAapt2Runtime);
  return modulePromise;
 }
-export async function compileAapt2Wasm({project,manifest,resourcePaths,moduleUrl=import.meta.url,fetchFn=fetch,moduleFactory=null}){
+export async function compileAapt2Wasm({project,manifest,resourcePaths,aarLibraries=[],moduleUrl=import.meta.url,fetchFn=fetch,moduleFactory=null}){
  const instance=moduleFactory?assertAapt2Runtime(await moduleFactory()):await availableModule(moduleUrl,fetchFn);
  if(!instance)return null;
  if(!project?.files||typeof manifest!=='string'||!resourcePaths?.length)
@@ -116,13 +116,41 @@ export async function compileAapt2Wasm({project,manifest,resourcePaths,moduleUrl
   writeDirectories(FS,dest);
   FS.writeFile(dest,bytes);
  }
- // Real AAPT2 compile and link. Both stages must produce physical files in the WASM FS.
+ // Compile AAR resource directories individually: this preserves distinct
+ // values/*.xml files and all Android qualifiers. AAPT2 resolves references
+ // between library/resource tables during the FINAL combined link.
+ const overlays=[];
+ for(let i=0;i<aarLibraries.length;i++){
+  const aar=aarLibraries[i];
+  if(!Array.isArray(aar.resources))throw Error('AAR resources non validées.');
+  if(!aar.resources.length)continue;
+  const libRoot=root+'/aar-'+i+'/res';
+  for(const file of aar.resources){
+   if(!/^res\/[A-Za-z0-9_+.-]+\/[A-Za-z0-9_.+-]+$/.test(file.path)||
+      !file.data||file.data.length>32*1024*1024)
+    throw Error('Chemin ou contenu de res/ AAR invalide : '+file.path);
+   total+=file.data.length;
+   if(total>180*1024*1024)throw Error('Plus de 180 Mio de ressources Android.');
+   const dest=root+'/aar-'+i+'/'+file.path;
+   writeDirectories(FS,dest);
+   FS.writeFile(dest,file.data);
+  }
+  const libZip=root+'/aar-'+i+'.zip';
+  runAapt2(instance,['compile','--dir',libRoot,'-o',libZip]);
+  const bytes=FS.readFile(libZip);
+  if(bytes.length<4||bytes[0]!==80||bytes[1]!==75)
+   throw Error('AAPT2 AAR : absence d’archive .flat pour '+aar.name);
+  overlays.push(libZip);
+ }
+ // Compile the user's resources last; application resources have higher
+ // priority than identically named library resources.
  runAapt2(instance,['compile','--dir',root+'/res','-o',compiled]);
  const intermediate=FS.readFile(compiled);
  if(intermediate.length<4||intermediate[0]!==0x50||intermediate[1]!==0x4b)
   throw Error('AAPT2 compile n’a pas produit une archive .flat valide.');
+ const compiledInputs=[...overlays,compiled].flatMap(file=>['-R',file]);
  runAapt2(instance,['link','-o',linked,'-I',sdk,'--manifest',manifestPath,
-  '--output-text-symbols',symbols,'--auto-add-overlay','-R',compiled]);
+  '--output-text-symbols',symbols,'--auto-add-overlay',...compiledInputs]);
  const apk=new Uint8Array(FS.readFile(linked));
  const rText=new TextDecoder().decode(FS.readFile(symbols));
  const ids=parseAapt2Symbols(rText);

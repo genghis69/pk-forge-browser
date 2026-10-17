@@ -4,7 +4,7 @@
  */
 import fs from 'node:fs';
 import {webcrypto} from 'node:crypto';
-import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex,apkforge_sign_linked_apk} from '../dist/wasm/pack/pack_wasm.js';
+import wasmInit,{apkforge_resource_ids,apkforge_sign_with_dex,apkforge_sign_linked_apk,apkforge_sign_linked_apk_with_extra} from '../dist/wasm/pack/pack_wasm.js';
 import {developmentPem,to64,from64} from '../src/crypto.mjs';
 import {inspectSignedApk} from '../src/apk-structure.mjs';
 import {verifyDexIntegrity} from '../src/dex-integrity.mjs';
@@ -48,3 +48,16 @@ inspectSignedApk(linkedSigned);
 fs.writeFileSync('ci/build/apkforge-aapt2-wasm-signed-proof.apk',linkedSigned);
 console.log('Signed Google Pack APK:',binary.length,'bytes; real R.string.app_name:',ids['string/app_name'].toString(16));
 console.log('Native AAPT2 resources + WASM DEX assembly/signing:',linkedSigned.length,'bytes');
+
+const extra=[['assets/aar-test-proof.txt',to64(new TextEncoder().encode('verified extra asset'))],
+ ['lib/arm64-v8a/libapkforge-test.so',to64(new TextEncoder().encode('signing fixture only, not ELF'))]];
+const allSigned=from64(apkforge_sign_linked_apk_with_extra(
+ to64(aapt2Linked),[to64(dex)],extra,input.combined_pem_string));
+inspectSignedApk(allSigned);
+const allZip=await import('node:child_process');
+fs.writeFileSync('ci/build/apkforge-aapt2-extra-files-proof.apk',allSigned);
+for(const [p] of extra){
+ const found=allZip.execFileSync('unzip',['-Z','-1','ci/build/apkforge-aapt2-extra-files-proof.apk'],{encoding:'utf8'});
+ if(!found.split(String.fromCharCode(10)).map(x=>x.trim()).includes(p))throw Error('AAR extra not present in signed APK: '+p);
+}
+console.log('Native AAPT2 + extra assets/JNI + v2/v3 signature:',allSigned.length,'bytes');

@@ -409,6 +409,18 @@ async function buildJavaGroup(project){
  const rCode=realJavaR(profile.namespace,linkedSession.ids);
  cheerpOSAddStringFile('/str/R.java',rCode);
  mountedSources.push('/str/R.java');
+ const libRPackages=linkedSession.aarState?.packages||[];
+ if(libRPackages.length){
+  const srcRoot='/files/apkforge-java/aar-r-'+runId;
+  for(const pkg of libRPackages){
+   const dest=srcRoot+'/'+pkg.replaceAll('.','/')+'/R.java';
+   const parent=dest.slice(0,dest.lastIndexOf('/'));
+   await Files.createDirectories(await Paths.get(parent));
+   await Files.writeString(await Paths.get(dest),realJavaR(pkg,linkedSession.ids));
+   mountedSources.push(dest);
+  }
+  log('Bibliothèques AAR : '+libRPackages.length+' véritables classes R.java générées avec les IDs AAPT2 finaux.');
+ }
  const appGradle=await project.files[project.analysis.appGradlePath]?.async('string');
  const generatedSettings=extractGradleBuildSettings(appGradle,project.analysis);
  const buildConfig=createGradleBuildConfig(project.analysis,generatedSettings);
@@ -437,10 +449,19 @@ async function buildJavaGroup(project){
  const archive=await JSZip.loadAsync(blob,{checkCRC32:true});
  const count=Object.keys(archive.files).filter(name=>name.endsWith('.class')).length;
  if(count<profile.paths.length)throw Error('Compilation Java partielle ('+count+' classes / '+profile.paths.length+' sources).');
+ if(linkedSession.aarState){
+  const missing=libRPackages.filter(pkg=>!archive.file(pkg.replaceAll('.','/')+'/R.class'));
+  if(missing.length)throw Error('R.class manquantes pour les namespaces AAR : '+missing.join(', '));
+  linkedSession.aarState.aarRCompiled=true;
+  log('R.class vérifiées : '+libRPackages.length+' packages Maven réellement compilés.');
+ }
  jarBlob=blob;
  lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,
   classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'java',
-  minSdk:profile.minSdk,apkBlockedReason:profile.apkBlockedReason,adsClasspath};
+  minSdk:profile.minSdk,apkBlockedReason:
+   linkedSession.aarState?.aarReady&&linkedSession.aarState?.aarRCompiled
+   ?null:profile.apkBlockedReason,
+   adsClasspath};
  el('androidCompileDex').disabled=false;
  el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
