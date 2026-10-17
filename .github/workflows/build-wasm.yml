@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Récupérer APK Forge Browser
         uses: actions/checkout@v5
+      - name: Installer le parseur XML uniquement pour les tests CI des manifestes AAR
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund @xmldom/xmldom@0.9.8
       - name: Vérifier les modules JavaScript
         run: |
           node --check src/app.mjs
@@ -34,6 +36,9 @@ jobs:
           node --test tests/ecj-browser-args.test.mjs
           node --check src/ads-dependencies.mjs
           node --test tests/ads-dependencies.test.mjs
+          node --check src/aar-merge.mjs
+          node --test tests/aar-merge.test.mjs
+          node --check ci/verify-aar-manifests.mjs
           node --check src/ads-runtime-dex.mjs
           node --test tests/ads-runtime-dex.test.mjs
           node --check src/gradle-generated.mjs
@@ -204,6 +209,11 @@ jobs:
             -d ci/build/ads-proof ci/samples/AdsSdkProof.java
           test -s ci/build/ads-proof/dev/apkforge/browser/proof/AdsSdkProof.class
           echo "AppLovin MAX et Google Ads : vrais types et signatures Java vérifiés."
+      - name: Vérifier le merge réel des manifestes de tous les AAR Maven
+        run: |
+          set -euo pipefail
+          node ci/verify-aar-manifests.mjs
+          test -s ci/build/aar-real-manifest.xml
       - name: Construire et tester l'assembleur JAR pour Kotlin dans Chrome
         run: |
           set -euo pipefail
@@ -402,6 +412,11 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose ci/build/apkforge-aapt2-wasm-signed-proof.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 ci/build/apkforge-wasm-signed-proof.apk
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 ci/build/apkforge-aapt2-wasm-signed-proof.apk
+          test -s ci/build/apkforge-aapt2-extra-files-proof.apk
+          unzip -Z -1 ci/build/apkforge-aapt2-extra-files-proof.apk | grep -Fx 'assets/aar-test-proof.txt'
+          unzip -Z -1 ci/build/apkforge-aapt2-extra-files-proof.apk | grep -Fx 'lib/arm64-v8a/libapkforge-test.so'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --min-sdk-version 26 --verbose ci/build/apkforge-aapt2-extra-files-proof.apk
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 ci/build/apkforge-aapt2-extra-files-proof.apk
       - name: Vérifier que les JAR sont bien publiés à leur chemin GitHub Pages
         run: |
           node --input-type=module <<'NODE'
