@@ -40,11 +40,17 @@ function rejectTools(el,source){
  // Tools directive semantics require AGP manifest merger. Refuse rather than
  // silently ignoring a remove/replace operation.
  if(mode&&mode!=='merge')throw Error('Manifest AAR : tools:node='+mode+' nécessite le merger Android Gradle : '+source);
- for(const child of el.children||[])rejectTools(child,source);
+ for(const child of Array.from(el.childNodes||[]).filter(n=>n.nodeType===1))rejectTools(child,source);
 }
-const directChildren=node=>Array.from(node?.children||[]);
+const directChildren=node=>Array.from(node?.childNodes||[]).filter(n=>n.nodeType===1);
 const byTag=(node,name)=>directChildren(node).filter(e=>elementName(e)===name);
 const first=(node,name)=>byTag(node,name)[0]||null;
+function stripTools(el){
+ for(const attr of Array.from(el.attributes||[]))
+  if(attr.namespaceURI===TOOLS||attr.name.startsWith('tools:'))
+   el.removeAttributeNode(attr);
+ for(const child of directChildren(el))stripTools(child);
+}
 function mergeAttrs(dest,source,sourceName){
  for(const attr of Array.from(source.attributes||[])){
   if(attr.name==='package'||attr.name==='xmlns:android'||attr.name==='xmlns:tools'||
@@ -91,6 +97,7 @@ function mergeChildren(dest,source,doc,sourceName){
   const imported=doc.importNode(element,true);
   // Strictly prevent directives requiring Gradle's full merger.
   rejectTools(imported,sourceName);
+  stripTools(imported);
   dest.appendChild(imported);
  }
 }
