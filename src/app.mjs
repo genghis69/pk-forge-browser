@@ -94,10 +94,21 @@ async function startAutomaticBuild(){
   }
   const diagnostic=getLastD8Diagnostic();
   const report=$('autoD8Report');
-  if(diagnostic&&report){
+  const validDex=getRuntimeArtifacts().runtimeZip;
+  // If D8 actually succeeded but the AAR integration prevented signing,
+  // offer the genuine DEX artifact; NEVER present it as an installable APK.
+  if(validDex&&report&&/AAR|publicitaire refusé|publicitaires/i.test(String(error?.message||''))){
+   autoDiagnosticUrl=URL.createObjectURL(validDex);
+   report.href=autoDiagnosticUrl;
+   report.download='trainmanager-dex-reels-non-installables.zip';
+   report.textContent='⬇ Télécharger les véritables DEX (APK non assemblé)';
+   report.style.display='inline-block';
+   autoLog('D8 réussi : les classes.dex du projet et des SDK Maven sont disponibles. Aucun APK n’a été signé, car les archives AAR doivent être fusionnées.');
+  }else if(diagnostic&&report){
    autoDiagnosticUrl=URL.createObjectURL(diagnostic);
    report.href=autoDiagnosticUrl;
    report.download='apkforge-d8-diagnostic.zip';
+   report.textContent='⬇ Télécharger le diagnostic D8';
    report.style.display='inline-block';
    autoLog('RAPPORT PRÊT : clique sur « Télécharger le diagnostic D8 » ci-dessous. Aucune recompilation nécessaire.');
   }
