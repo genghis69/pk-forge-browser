@@ -66,7 +66,7 @@ async function startAutomaticBuild(){
    return;
   }
   const apk=await runAutomaticApkBuild({
-   project:state,prepareResources:prepareRealResources,
+   project:state,prepareResources:prepareRealResources,language:selection.mode,
    compileKotlin:selection.mode==='java'?compileJavaForApk:compileKotlinForApk,compileDex:compileRuntimeDexForApk,
    assembleApk:assembleRealApk,onPhase
   });

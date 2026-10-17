@@ -139,7 +139,7 @@ async function buildGroup(project){
  if(count<profile.paths.length)throw Error('Seulement '+count+' classes JVM pour '+profile.paths.length+' sources. Vérification à poursuivre.');
  log('SUCCÈS : '+count+' classes JVM produites depuis les sources du ZIP ('+(blob.size/1024).toFixed(1)+' Kio).');
  jarBlob=blob;
- lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip};
+ lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'kotlin',minSdk:Number(project.analysis.minSdk)||26};
  el('androidCompileDex').disabled=false;
  el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
@@ -433,7 +433,7 @@ export async function compileRuntimeDexForApk(project){
  if(locked)throw Error('Une compilation Kotlin ou D8 est déjà en cours.');
  if(!project?.zip||lastCompilation?.sourceZip!==project.zip||
     lastCompilation?.linkedResourceSession!==getResourceSession(project)||!jarBlob)
-  throw Error('Le JAR Kotlin avec R réel doit être compilé pour ce ZIP avant D8.');
+  throw Error('Le JAR Java ou Kotlin avec R réel doit être compilé pour ce ZIP avant D8.');
  locked=true;runtimeZip=null;resetProgress();
  el('androidCompileAll').disabled=true;
  el('androidCompileDex').disabled=true;

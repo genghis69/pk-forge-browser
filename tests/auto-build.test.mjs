@@ -38,3 +38,17 @@ test('Refuse les anciens DEX de diagnostic avec R temporaire',async()=>{
  }),/DEX ne correspondent/);
  assert.equal(assembled,false);
 });
+
+test('Le pipeline Java utilise ECJ sans changer les quatre phases',async()=>{
+ const events=[];
+ const resources={ids:{'layout/main':0x7f020001}};
+ const result=await runAutomaticApkBuild({
+  project,language:'java',
+  prepareResources:async()=>resources,
+  compileKotlin:async()=>events.push('ECJ'),
+  compileDex:async()=>({runtimeZip:new Blob(['dex']),linkedResourceSession:resources,sourceZip:project.zip}),
+  assembleApk:async()=>new Blob([new Uint8Array(256)]),
+  onPhase:event=>{if(event.phase===2&&event.status==='running')assert.match(event.name,/Java ECJ/);}
+ });
+ assert.ok(result.size>100);assert.deepEqual(events,['ECJ']);
+});

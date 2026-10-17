@@ -2,12 +2,13 @@
  * Orchestrateur sans moteur fictif. Les opérations sont réellement exécutées
  * dans le navigateur, dans l'ordre, et interrompues à la première erreur.
  */
-export async function runAutomaticApkBuild({project,prepareResources,compileKotlin,compileDex,assembleApk,onPhase=()=>{}}){
+export async function runAutomaticApkBuild({project,prepareResources,compileKotlin,compileDex,assembleApk,language='kotlin',onPhase=()=>{}}){
+ if(!['java','kotlin'].includes(language))throw Error('Langage de compilation non reconnu : '+language);
  if(!project?.zip||!project?.analysis||!project?.files)
   throw Error('Importe un ZIP Android valide avant la compilation automatique.');
  const steps=[
   {name:'AAPT2 : compilation des ressources Android',run:()=>prepareResources(project)},
-  {name:'Kotlin : compilation du code avec les vrais identifiants R',run:()=>compileKotlin(project)},
+  {name:language==='java'?'Java ECJ : compilation du code avec les vrais identifiants R':'Kotlin : compilation du code avec les vrais identifiants R',run:()=>compileKotlin(project)},
   {name:'D8 : intégration des bibliothèques et génération des DEX',run:()=>compileDex(project)},
  ];
  let resourceSession=null,artifacts=null;
