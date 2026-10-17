@@ -28,3 +28,9 @@ test('Le compilateur Java doit exclure les sources Kotlin et les classes hors mo
  assert.throws(()=>javaCompileProfile({...base,kotlin:1},catalog),/mixte/);
  assert.deepEqual(javaSourcePaths(base),base.javaPaths);
 });
+
+test('Signale la fusion AAR encore nécessaire, sans prétendre que le SDK est absent',()=>{
+ const analysis={...base,dependencies:['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0']};
+ const sdk={...catalog,trainManagerAds:{selectedAppLovin:'13.6.4',artifacts:27,aars:21,aarResources:503,manifestResourceMergeSupported:false}};
+ assert.throws(()=>javaCompileProfile(analysis,sdk),/fusion des manifestes, ressources et R des AAR/);
+});

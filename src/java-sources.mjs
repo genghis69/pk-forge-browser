@@ -26,7 +26,20 @@ export function javaCompileProfile(analysis,catalog){
  if(analysis.unresolvedDependencies?.length)
   throw Error('Dépendances Gradle non résolues (aliases/modules/fichiers) : '+analysis.unresolvedDependencies.join(', '));
  const required=new Set(catalog.requiredCoordinates||[]);
- const missing=(analysis.dependencies||[]).filter(x=>!required.has(x));
+ const declared=analysis.dependencies||[];
+ const adsRequested=['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0'];
+ const adsProfile=adsRequested.every(x=>declared.includes(x));
+ if(adsProfile){
+  const ads=catalog.trainManagerAds;
+  if(!ads||!ads.selectedAppLovin)
+   throw Error('Dépendances MAX/GMS non résolues dans le catalogue Maven publié.');
+  if(ads.manifestResourceMergeSupported!==true)
+   throw Error('AppLovin MAX '+ads.selectedAppLovin+' et Google Ads sont maintenant résolus ('+
+    ads.artifacts+' artefacts Maven dont '+ads.aars+' AAR et '+ads.aarResources+
+    ' ressources Android), mais la fusion des manifestes, ressources et R des AAR'+
+    ' n’est pas encore intégrée au navigateur. Compilation suspendue pour éviter un APK incomplet.');
+ }
+ const missing=declared.filter(x=>!required.has(x));
  if(missing.length)throw Error('Dépendances Gradle Java absentes du moteur actuel : '+missing.join(', ')+
   '. Elles doivent être résolues, avec leurs classes et ressources, avant de compiler et signer TrainManager.');
  const namespace=analysis.namespace!=='Non précisé'?analysis.namespace:analysis.packageName;

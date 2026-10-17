@@ -20,7 +20,24 @@ const artifacts=[{name:'classes-tool.jar',relative:'helpers/1/classes-tool.jar',
  {name:'android.jar',relative:'sdk/36/android.jar',kind:'platform',...checksum(sdk)},
  ...libs.map(name=>({name,relative:'deps/elm327-v1/jars/'+name,kind:'dependency',...checksum(path.join(deps,name))}))
 ];
-const result={format:2,compileSdk:36,profile:'elm327-v1',
+const adsCatalogPath=path.join(root,'deps/trainmanager-ads-v1/resolved.json');
+if(!fs.existsSync(adsCatalogPath))throw Error('TrainManager ads Maven catalog missing');
+const adsResolved=JSON.parse(fs.readFileSync(adsCatalogPath,'utf8'));
+if(!Array.isArray(adsResolved.artifacts)||adsResolved.artifacts.length<2)
+ throw Error('TrainManager ads dependencies unresolved');
+const trainManagerAds={
+  requested:adsResolved.requested,
+  selectedAppLovin:adsResolved.artifacts.find(a=>a.group==='com.applovin'&&a.name==='applovin-sdk')?.version,
+  artifacts:adsResolved.artifacts.length,
+  aars:adsResolved.artifacts.filter(a=>a.extension==='aar').length,
+  aarResources:adsResolved.artifacts.reduce((n,a)=>n+(a.resourceCount||0),0),
+  aarNative:adsResolved.artifacts.reduce((n,a)=>n+(a.nativeCount||0),0),
+  aarAssets:adsResolved.artifacts.reduce((n,a)=>n+(a.assetsCount||0),0),
+  // Public SDK binaries are downloaded and hashed, but an APK also needs
+  // Android library manifest/resource/asset merging and library R.java.
+  manifestResourceMergeSupported:false
+};
+const result={format:2,compileSdk:36,profile:'elm327-v1',trainManagerAds,
  javaCompiler:{name:'ecj.jar',relative:'java/ecj/3.43.0/ecj.jar',version:'3.43.0',entryPoint:'org.eclipse.jdt.internal.compiler.batch.Main',...checksum(javaPath)},
  requiredCoordinates:['androidx.core:core:1.13.1','com.github.mik3y:usb-serial-for-android:3.11.0'],
  artifacts,apkReady:false,
