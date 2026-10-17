@@ -3,6 +3,7 @@
  */
 import {compileProfile,generateCompileOnlyR,buildDiagnostic} from './android-sources.mjs';
 import {javaCompileProfile,realJavaR} from './java-sources.mjs';
+import {ecjAndroidArguments} from './ecj-browser-args.mjs';
 import {extractGradleBuildSettings,createGradleBuildConfig} from './gradle-generated.mjs';
 import {mountJar,virtualJarPath} from './jvm-artifacts.mjs';
 import {toolchainUrl} from './toolchain-paths.mjs';
@@ -356,6 +357,22 @@ async function buildJavaGroup(project){
   expectedSize:javaCompiler.size,sha256:javaCompiler.sha256,moduleUrl,
   fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
  });
+ const adapter=javaCompiler.adapter;
+ if(!adapter?.relative||!adapter.sha256||!adapter.size)
+  throw Error('Compilateur Java : pont ECJ Java 17 sans JDK virtuel absent du catalogue.');
+ const ecjApiTool=await mountJar({
+  relative:adapter.relative,filename:adapter.name,
+  expectedSize:adapter.size,sha256:adapter.sha256,moduleUrl,
+  fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+ });
+ const javaBase=javaCompiler.javaBase;
+ if(!javaBase?.relative||!javaBase.sha256||javaBase.compileOnly!==true)
+  throw Error('Java 17 : classes standard authentiques java.base absentes du catalogue. Compilation suspendue.');
+ const javaBasePath=await mountJar({
+  relative:javaBase.relative,filename:javaBase.name,
+  expectedSize:javaBase.size,sha256:javaBase.sha256,moduleUrl,
+  fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+ });
  const runId=Date.now().toString(36);
  const compiled='/files/apkforge-java/classes-'+runId;
  const Paths=await runtime.library.java.nio.file.Paths;
@@ -377,13 +394,19 @@ async function buildJavaGroup(project){
  cheerpOSAddStringFile('/str/BuildConfig.java',buildConfig);
  mountedSources.push('/str/BuildConfig.java');
  log('BuildConfig Java 17 généré localement : identifiants MAX vides comme dans le ZIP sans local.properties.');
- const cp=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
-  ...adsClasspath].map(x=>x.path).join(':');
+ const javaPaths=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
+  ...adsClasspath].map(x=>x.path);
+ // Real OpenJDK Java 17 classes complement missing java.lang.invoke types.
+ // NEVER add this compile-only library to lastCompilation.classpath / D8.
+ javaPaths.push(javaBasePath);
+ const ecjArgs=ecjAndroidArguments({androidJar:jarRoot.path,
+  classpath:javaPaths,outputDir:compiled,sources:mountedSources});
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
+ log('ECJ API Java 17 : utilisation de Compiler + FileSystem avec les vrais JAR Android/Maven. Aucun balayage du JDK virtuel /lt/17.');
  const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(
-  'org.eclipse.jdt.internal.compiler.batch.Main',ecj,
-  '-17','-proc:none','-classpath',cp,'-d',compiled,...mountedSources));
- if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+'). Vérifie les imports Android et les dépendances du projet dans F12.');
+  'dev.apkforge.tools.ApkForgeEcjCompiler',ecj+':'+ecjApiTool,...ecjArgs));
+ if(ret!==0)throw Error('ECJ Java a échoué (code '+ret+
+  '). Consulte les erreurs ECJ détaillées dans la console F12 (sans ajouter de classes factices).');
  const jarPath='/files/apkforge-java/java-compiled-'+runId+'.jar';
  const jarRet=await observedJavaExecution('Assemblage des classes Java',()=>cheerpjRunMain(
   'dev.apkforge.tools.BuildClassesJar',tool.path,compiled,jarPath));

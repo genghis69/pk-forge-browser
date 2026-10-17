@@ -16,6 +16,12 @@ const javaPath=path.join(root,'java/ecj/3.43.0/ecj.jar');
 if(!fs.existsSync(javaPath)||fs.statSync(javaPath).size<1e6)throw Error('Eclipse ECJ Java compiler JAR is missing');
 const helperPath=path.join(root,'helpers/1/classes-tool.jar');
 if(!fs.existsSync(helperPath))throw Error('CheerpJ classes tool jar is missing');
+const ecjApiPath=path.join(root,'helpers/1/ecj-api-tool.jar');
+if(!fs.existsSync(ecjApiPath)||fs.statSync(ecjApiPath).size<1000)
+ throw Error('ECJ Java 17 API adapter absent du catalogue navigateur');
+const jdkBasePath=path.join(root,'java/jdk-17/java-base-compile.jar');
+if(!fs.existsSync(jdkBasePath)||fs.statSync(jdkBasePath).size<100000)
+ throw Error('Classes Java 17 réelles de java.base.jmod absentes du catalogue');
 const artifacts=[{name:'classes-tool.jar',relative:'helpers/1/classes-tool.jar',kind:'tool',...checksum(helperPath)},
  {name:'android.jar',relative:'sdk/36/android.jar',kind:'platform',...checksum(sdk)},
  ...libs.map(name=>({name,relative:'deps/elm327-v1/jars/'+name,kind:'dependency',...checksum(path.join(deps,name))}))
@@ -71,7 +77,12 @@ const trainManagerAds={
   manifestResourceMergeSupported:false
 };
 const result={format:2,compileSdk:36,profile:'elm327-v1',trainManagerAds,
- javaCompiler:{name:'ecj.jar',relative:'android/java/ecj/3.43.0/ecj.jar',version:'3.43.0',entryPoint:'org.eclipse.jdt.internal.compiler.batch.Main',...checksum(javaPath)},
+ javaCompiler:{name:'ecj.jar',relative:'android/java/ecj/3.43.0/ecj.jar',version:'3.43.0',
+ entryPoint:'dev.apkforge.tools.ApkForgeEcjCompiler',
+ adapter:{name:'ecj-api-tool.jar',relative:'android/helpers/1/ecj-api-tool.jar',...checksum(ecjApiPath)},
+ javaBase:{name:'java-base-compile.jar',relative:'android/java/jdk-17/java-base-compile.jar',
+  compileOnly:true,...checksum(jdkBasePath)},
+ ...checksum(javaPath)},
  requiredCoordinates:['androidx.core:core:1.13.1','com.github.mik3y:usb-serial-for-android:3.11.0'],
  artifacts,apkReady:false,
  scope:'compile-only classpath, R is a temporary diagnostic stub; resources not linked into an APK'};

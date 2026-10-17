@@ -46,6 +46,15 @@ if(android.javaCompiler?.relative!=='android/java/ecj/3.43.0/ecj.jar')
   String(android.javaCompiler?.relative)+
   ' (doit commencer par android/ pour GitHub Pages).');
 check(android.javaCompiler.relative,android.javaCompiler.size,android.javaCompiler.sha256);
+if(android.javaCompiler.entryPoint!=='dev.apkforge.tools.ApkForgeEcjCompiler'||
+   !android.javaCompiler.adapter?.relative)
+ throw Error('ECJ sans son véritable pilote Java 17 API : catalogue incomplet.');
+check(android.javaCompiler.adapter.relative,
+ android.javaCompiler.adapter.size,android.javaCompiler.adapter.sha256);
+if(android.javaCompiler.javaBase?.compileOnly!==true)
+ throw Error('Java 17 java.base doit rester exclusivement dans le classpath de compilation.');
+check(android.javaCompiler.javaBase.relative,
+ android.javaCompiler.javaBase.size,android.javaCompiler.javaBase.sha256);
 
 const ads=android.trainManagerAds;
 if(!ads||!Array.isArray(ads.jarArtifacts)||!Array.isArray(ads.aarArtifacts))

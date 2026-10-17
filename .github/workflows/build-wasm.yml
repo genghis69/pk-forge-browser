@@ -30,6 +30,8 @@ jobs:
           node --check src/app.mjs
           node --check src/android-compiler.mjs
           node --check src/java-sources.mjs
+          node --check src/ecj-browser-args.mjs
+          node --test tests/ecj-browser-args.test.mjs
           node --check src/ads-dependencies.mjs
           node --test tests/ads-dependencies.test.mjs
           node --check src/gradle-generated.mjs
@@ -231,6 +233,37 @@ jobs:
             -d ci/build/java-ecj-proof ci/samples/BrowserActivity.java
           test -s ci/build/java-ecj-proof/dev/apkforge/browser/proof/BrowserActivity.class
           javap -classpath ci/build/java-ecj-proof -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
+      - name: Compiler et tester le pont API ECJ Java 17 sans JDK virtuel
+        run: |
+          set -euo pipefail
+          ECJ_JAR=dist/toolchains/android/java/ecj/3.43.0/ecj.jar
+          # Authentic Java 17 compile-only classes. Android SDK wins if a type
+          # is defined in both archives. Never feed this JAR to D8 runtime.
+          JAVA_BASE=dist/toolchains/android/java/jdk-17/java-base-compile.jar
+          mkdir -p ci/build/jdk17-base dist/toolchains/android/java/jdk-17
+          "$JAVA_HOME/bin/jmod" extract --dir ci/build/jdk17-base "$JAVA_HOME/jmods/java.base.jmod"
+          jar --create --file "$JAVA_BASE" -C ci/build/jdk17-base/classes .
+          unzip -tqq "$JAVA_BASE"
+          unzip -Z -1 "$JAVA_BASE" | grep -Fx 'java/lang/invoke/LambdaMetafactory.class'
+          unzip -Z -1 "$JAVA_BASE" | grep -Fx 'java/lang/Record.class'
+          mkdir -p ci/build/ecj-api-classes dist/toolchains/android/helpers/1 ci/build/java-ecj-no-system
+          javac --release 17 -cp "$ECJ_JAR" -d ci/build/ecj-api-classes ci/ApkForgeEcjCompiler.java
+          test -s ci/build/ecj-api-classes/dev/apkforge/tools/ApkForgeEcjCompiler.class
+          jar --create --file dist/toolchains/android/helpers/1/ecj-api-tool.jar -C ci/build/ecj-api-classes .
+          unzip -tqq dist/toolchains/android/helpers/1/ecj-api-tool.jar
+          mapfile -t AD_JARS < <(node ci/verify-ads-classpath.mjs --classpath)
+          ADS_CP="$(printf '%s\n' "${AD_JARS[@]}" | paste -sd ':' -)"
+          # Real ECJ compiler API, Java 17 and real Android/Maven bytecode.
+          # This must NOT call ECJ batch.Main, as it scans java.home/lib/modules.
+          java -cp "$ECJ_JAR:dist/toolchains/android/helpers/1/ecj-api-tool.jar" \
+            dev.apkforge.tools.ApkForgeEcjCompiler \
+            ci/build/java-ecj-no-system \
+            "dist/toolchains/android/sdk/36/android.jar:$ADS_CP:$JAVA_BASE" \
+            ci/samples/BrowserActivity.java ci/samples/AdsSdkProof.java
+          test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/BrowserActivity.class
+          test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/AdsSdkProof.class
+          javap -classpath ci/build/java-ecj-no-system -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
+          echo 'ECJ Java 17 par API, sans autodétection JDK et avec vrais SDK : validé.'
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
