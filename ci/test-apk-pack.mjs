@@ -58,6 +58,6 @@ const allZip=await import('node:child_process');
 fs.writeFileSync('ci/build/apkforge-aapt2-extra-files-proof.apk',allSigned);
 for(const [p] of extra){
  const found=allZip.execFileSync('unzip',['-Z','-1','ci/build/apkforge-aapt2-extra-files-proof.apk'],{encoding:'utf8'});
- if(!found.split(/\\r?\\n/).includes(p))throw Error('AAR extra not present in signed APK: '+p);
+ if(!found.split(String.fromCharCode(10)).map(x=>x.trim()).includes(p))throw Error('AAR extra not present in signed APK: '+p);
 }
 console.log('Native AAPT2 + extra assets/JNI + v2/v3 signature:',allSigned.length,'bytes');
