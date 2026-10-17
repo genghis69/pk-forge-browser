@@ -34,6 +34,8 @@ jobs:
           node --test tests/ecj-browser-args.test.mjs
           node --check src/ads-dependencies.mjs
           node --test tests/ads-dependencies.test.mjs
+          node --check src/ads-runtime-dex.mjs
+          node --test tests/ads-runtime-dex.test.mjs
           node --check src/gradle-generated.mjs
           node --test tests/gradle-generated.test.mjs
           node --check ci/verify-ads-classpath.mjs
@@ -264,6 +266,22 @@ jobs:
           test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/AdsSdkProof.class
           javap -classpath ci/build/java-ecj-no-system -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
           echo 'ECJ Java 17 par API, sans autodétection JDK et avec vrais SDK : validé.'
+      - name: Convertir en vrais DEX Android les classes AppLovin/Google Maven
+        run: |
+          set -euo pipefail
+          mapfile -t ADS_JARS < <(node ci/verify-ads-classpath.mjs --classpath)
+          test "${#ADS_JARS[@]}" -gt 2
+          mkdir -p ci/build/ads-real-dex
+          jar --create --file ci/build/ads-real-proof.jar -C ci/build/java-ecj-no-system .
+          test -s ci/build/ads-real-proof.jar
+          java -Xmx3g -cp dist/toolchains/r8/8.13.17/r8-8.13.17.jar com.android.tools.r8.D8 \
+            --thread-count 1 --min-api 26 \
+            --lib dist/toolchains/android/sdk/36/android.jar \
+            --output ci/build/ads-real-dex/runtime.zip \
+            ci/build/ads-real-proof.jar "${ADS_JARS[@]}"
+          unzip -tqq ci/build/ads-real-dex/runtime.zip
+          unzip -Z -1 ci/build/ads-real-dex/runtime.zip | grep -Fx 'classes.dex'
+          echo 'D8 réel : AppLovin et Google + exemple Java produisent des DEX sans JAR du JDK.'
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
