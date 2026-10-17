@@ -203,6 +203,7 @@ async function compileStandaloneDex(){
  */
 async function buildRuntimeDex(){
  lastD8Diagnostic=null;
+ if(lastCompilation?.apkBlockedReason)throw Error(lastCompilation.apkBlockedReason);
  if(!lastCompilation)throw Error('Compile les sources Java ou Kotlin avant de générer les DEX avec les bibliothèques.');
  const {jarPath,jarRoot,classpath,runtime,sourceCount,classCount}=lastCompilation;
  const plan=planRuntimeJars(classpath);
@@ -334,6 +335,19 @@ async function buildJavaGroup(project){
  const sources=await Promise.all(profile.paths.map(path=>readSource(project,path)));
  const runtime=await getKotlinRuntime();
  const classpath=await mountAndroidClasspath(catalog);
+ // Public Maven bytecode is published as static files, not generated stubs.
+ // Mount only requested advertisement JARs; preserve ELM327/Kotlin behavior.
+ const adsClasspath=[];
+ for(const jar of profile.adsClasspath){
+  const filePath=await mountJar({
+   relative:'android/'+jar.relative,filename:jar.name,
+   expectedSize:jar.size,sha256:jar.sha256,moduleUrl,
+   fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+  });
+  adsClasspath.push({...jar,path:filePath});
+ }
+ if(adsClasspath.length)
+  log('SDK publicitaires réels : '+adsClasspath.length+' JAR Maven SHA-256 vérifiés pour ECJ.');
  const jarRoot=classpath.find(a=>a.name==='android.jar');
  const tool=classpath.find(a=>a.name==='classes-tool.jar');
  if(!jarRoot||!tool)throw Error('SDK Android 36 ou assembleur JVM absent.');
@@ -363,7 +377,8 @@ async function buildJavaGroup(project){
  cheerpOSAddStringFile('/str/BuildConfig.java',buildConfig);
  mountedSources.push('/str/BuildConfig.java');
  log('BuildConfig Java 17 généré localement : identifiants MAX vides comme dans le ZIP sans local.properties.');
- const cp=classpath.filter(x=>x.kind==='platform'||x.kind==='dependency').map(x=>x.path).join(':');
+ const cp=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
+  ...adsClasspath].map(x=>x.path).join(':');
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
  const ret=await observedJavaExecution('ECJ Java Android',()=>cheerpjRunMain(
   'org.eclipse.jdt.internal.compiler.batch.Main',ecj,
@@ -380,12 +395,19 @@ async function buildJavaGroup(project){
  if(count<profile.paths.length)throw Error('Compilation Java partielle ('+count+' classes / '+profile.paths.length+' sources).');
  jarBlob=blob;
  lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,
-  classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'java',minSdk:profile.minSdk};
+  classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'java',
+  minSdk:profile.minSdk,apkBlockedReason:profile.apkBlockedReason};
  el('androidCompileDex').disabled=false;
  el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
- log('ECJ : '+count+' classes Java compilées. D8 utilisera les classes et bibliothèques Android.');
- status('ECJ Java compilé : '+count+' classes JVM prêtes pour D8.',true);
+ if(profile.apkBlockedReason){
+  el('androidRuntimeDex').disabled=true;
+  log('ARRÊT APK : '+profile.apkBlockedReason);
+  status('ECJ Java : '+count+' classes JVM compilées. '+profile.apkBlockedReason,true);
+ }else{
+  log('ECJ : '+count+' classes Java compilées. D8 utilisera les classes et bibliothèques Android.');
+  status('ECJ Java compilé : '+count+' classes JVM prêtes pour D8.',true);
+ }
  return lastCompilation;
 }
 export async function compileJavaForApk(project){
@@ -406,7 +428,7 @@ export async function compileJavaForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
  }
 }
 
@@ -433,7 +455,7 @@ export async function compileKotlinForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
  }
 }
 export async function compileRuntimeDexForApk(project){
@@ -457,7 +479,7 @@ export async function compileRuntimeDexForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation;
+  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
  }
 }
 export function getRuntimeArtifacts(){
@@ -472,7 +494,7 @@ export function attachAndroidCompiler(getProject){
   status('D8 : conversion des classes Kotlin en cours. JAR déjà compilé et disponible...');
   try{await compileStandaloneDex();}
   catch(e){log('ERREUR D8 : '+e.message);status('La conversion D8 a échoué ou s’est interrompue : '+e.message+'. Le JAR JVM reste disponible.');console.error('APK Forge D8 standalone',e);}
-  finally{locked=false;el('androidCompileDex').disabled=!lastCompilation;el('androidRuntimeDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
+  finally{locked=false;el('androidCompileDex').disabled=!lastCompilation;el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;el('androidCompileAll').disabled=false;}
  });
  el('androidReloadCompiler')?.addEventListener('click',()=>{
   if(window.confirm('Recharger la page pour interrompre la JVM ? Réimporte le ZIP ensuite.'))window.location.reload();
@@ -484,7 +506,7 @@ export function attachAndroidCompiler(getProject){
   runtimeZip=null;el('androidRuntimeDownload').disabled=true;
   try{await buildRuntimeDex();}
   catch(e){log('ERREUR RUNTIME : '+e.message);status('Fusion runtime interrompue : '+e.message);console.error('APK Forge runtime D8',e);}
-  finally{locked=false;el('androidRuntimeDex').disabled=!lastCompilation;el('androidCompileDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
+  finally{locked=false;el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;el('androidCompileDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
  });
  el('androidCompileAll').addEventListener('click',async()=>{
   if(locked)return;locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;

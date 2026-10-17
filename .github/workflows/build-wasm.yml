@@ -2,6 +2,8 @@ name: Construire Google Pack WebAssembly et publier APK Forge
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
   workflow_run:
     workflows: ['Portage AAPT2 original vers WebAssembly (expérimental)']
@@ -28,8 +30,11 @@ jobs:
           node --check src/app.mjs
           node --check src/android-compiler.mjs
           node --check src/java-sources.mjs
+          node --check src/ads-dependencies.mjs
+          node --test tests/ads-dependencies.test.mjs
           node --check src/gradle-generated.mjs
           node --test tests/gradle-generated.test.mjs
+          node --check ci/verify-ads-classpath.mjs
           node --test tests/java-sources.test.mjs
           node --check src/real-resources.mjs
           node --check src/aapt2-diagnostics.mjs
@@ -183,6 +188,18 @@ jobs:
             console.log(a.group+':'+a.name+':'+a.version+' '+a.extension+' res='+a.resourceCount);
           }
           NODE
+      - name: Vérifier les véritables classes Maven AppLovin et Google Ads
+        run: |
+          set -euo pipefail
+          node ci/verify-ads-classpath.mjs
+          mapfile -t AD_JARS < <(node ci/verify-ads-classpath.mjs --classpath)
+          test "${#AD_JARS[@]}" -gt 2
+          ADS_CP="$(printf '%s\n' "${AD_JARS[@]}" | paste -sd ':' -)"
+          mkdir -p ci/build/ads-proof
+          javac --release 17 -cp "dist/toolchains/android/sdk/36/android.jar:$ADS_CP" \
+            -d ci/build/ads-proof ci/samples/AdsSdkProof.java
+          test -s ci/build/ads-proof/dev/apkforge/browser/proof/AdsSdkProof.class
+          echo "AppLovin MAX et Google Ads : vrais types et signatures Java vérifiés."
       - name: Construire et tester l'assembleur JAR pour Kotlin dans Chrome
         run: |
           set -euo pipefail
@@ -404,16 +421,16 @@ jobs:
             echo "::notice::Le WASM est compilé et téléchargeable dans les Artifacts. Active GitHub Pages dans Settings > Pages > Source: GitHub Actions pour la publication automatique."
           fi
       - name: Configurer GitHub Pages
-        if: steps.pages.outputs.enabled == 'true'
+        if: steps.pages.outputs.enabled == 'true' && github.event_name != 'pull_request'
         uses: actions/configure-pages@v5
       - name: Préparer le site pour GitHub Pages
-        if: steps.pages.outputs.enabled == 'true'
+        if: steps.pages.outputs.enabled == 'true' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/
   deploy:
     needs: build
-    if: needs.build.outputs.pages_enabled == 'true'
+    if: needs.build.outputs.pages_enabled == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
