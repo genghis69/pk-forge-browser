@@ -12,6 +12,7 @@ import {inspectSignedApk} from './apk-structure.mjs';
 import {assertApkLaunchClasses,definedDexClasses} from './apk-launch-check.mjs';
 import {verifyDexIntegrity,assertManifestProvidersPresent} from './dex-integrity.mjs';
 import {extractGradleBuildSettings} from './gradle-generated.mjs';
+import {assertNoUnmergedAdsApk} from './ads-dependencies.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -188,6 +189,7 @@ export async function prepareRealResources(project){
  return session;
 }
 export async function assembleRealApk(project,artifact){
+ assertNoUnmergedAdsApk(project?.analysis);
  const prepared=getResourceSession(project);
  if(!prepared)throw Error('Compile les ressources avec Google Pack avant de construire un APK.');
  if(artifact?.linkedResourceSession!==prepared||!artifact.runtimeZip)
