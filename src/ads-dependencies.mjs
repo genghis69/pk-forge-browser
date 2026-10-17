@@ -56,3 +56,11 @@ export function resolveTrainManagerAds(analysis,catalog){
   selectedAppLovin:ads.selectedAppLovin,
   aars:ads.aars,aarResources:ads.aarResources};
 }
+
+/** Defense in depth: no DEX/archive caller may assemble an ads APK yet. */
+export function assertNoUnmergedAdsApk(analysis){
+ const coordinates=analysis?.dependencies??[];
+ if(coordinates.some(x=>/^com\.applovin:|^com\.google\.android\.gms:play-services-ads-identifier:/.test(x)))
+  throw Error('APK publicitaire refusé : les manifestes, ressources Android, R, assets et bibliothèques natives AAR ne sont pas encore fusionnés dans Chrome.');
+ return true;
+}
