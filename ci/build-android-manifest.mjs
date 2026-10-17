@@ -71,7 +71,7 @@ const trainManagerAds={
   manifestResourceMergeSupported:false
 };
 const result={format:2,compileSdk:36,profile:'elm327-v1',trainManagerAds,
- javaCompiler:{name:'ecj.jar',relative:'java/ecj/3.43.0/ecj.jar',version:'3.43.0',entryPoint:'org.eclipse.jdt.internal.compiler.batch.Main',...checksum(javaPath)},
+ javaCompiler:{name:'ecj.jar',relative:'android/java/ecj/3.43.0/ecj.jar',version:'3.43.0',entryPoint:'org.eclipse.jdt.internal.compiler.batch.Main',...checksum(javaPath)},
  requiredCoordinates:['androidx.core:core:1.13.1','com.github.mik3y:usb-serial-for-android:3.11.0'],
  artifacts,apkReady:false,
  scope:'compile-only classpath, R is a temporary diagnostic stub; resources not linked into an APK'};
