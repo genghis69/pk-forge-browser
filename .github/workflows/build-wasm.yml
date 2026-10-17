@@ -233,37 +233,28 @@ jobs:
             -d ci/build/java-ecj-proof ci/samples/BrowserActivity.java
           test -s ci/build/java-ecj-proof/dev/apkforge/browser/proof/BrowserActivity.class
           javap -classpath ci/build/java-ecj-proof -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
-      - name: Prouver ECJ Java 17 sans JDK système via les mêmes arguments que Chrome
+      - name: Compiler et tester le pont API ECJ Java 17 sans JDK virtuel
         run: |
           set -euo pipefail
+          ECJ_JAR=dist/toolchains/android/java/ecj/3.43.0/ecj.jar
+          mkdir -p ci/build/ecj-api-classes dist/toolchains/android/helpers/1 ci/build/java-ecj-no-system
+          javac --release 17 -cp "$ECJ_JAR" -d ci/build/ecj-api-classes ci/ApkForgeEcjCompiler.java
+          test -s ci/build/ecj-api-classes/dev/apkforge/tools/ApkForgeEcjCompiler.class
+          jar --create --file dist/toolchains/android/helpers/1/ecj-api-tool.jar -C ci/build/ecj-api-classes .
+          unzip -tqq dist/toolchains/android/helpers/1/ecj-api-tool.jar
           mapfile -t AD_JARS < <(node ci/verify-ads-classpath.mjs --classpath)
           ADS_CP="$(printf '%s\n' "${AD_JARS[@]}" | paste -sd ':' -)"
-          mkdir -p ci/build/java-ecj-no-system
-          node --input-type=module <<'NODE'
-          import {ecjAndroidArguments} from './src/ecj-browser-args.mjs';
-          import {writeFileSync} from 'node:fs';
-          const androidJar='/str/android.jar';
-          const argv=ecjAndroidArguments({androidJar,
-            classpath:[androidJar,'/str/pub-ads.jar'],
-            outputDir:'/files/compiled',
-            sources:['/str/BrowserActivity.java','/str/AdsSdkProof.java']});
-          if(argv.join(' ').includes('/lt/17')||argv.includes('-bootclasspath')||
-             !argv.includes('--system')||!argv.includes('none'))
-            throw Error('Configuration ECJ browser dépend encore du JDK système');
-          writeFileSync('ci/build/java-ecj-browser-options.json',JSON.stringify(argv));
-          NODE
-          # Use EXACTLY the Java version and explicit system-library switch
-          # that the CheerpJ adapter passes to ECJ; real Android and ads JARs.
-          java -cp dist/toolchains/android/java/ecj/3.43.0/ecj.jar \
-            org.eclipse.jdt.internal.compiler.batch.Main \
-            -17 -proc:none --system none -encoding UTF-8 \
-            -classpath "dist/toolchains/android/sdk/36/android.jar:$ADS_CP" \
-            -d ci/build/java-ecj-no-system \
+          # Real ECJ compiler API, Java 17 and real Android/Maven bytecode.
+          # This must NOT call ECJ batch.Main, as it scans java.home/lib/modules.
+          java -cp "$ECJ_JAR:dist/toolchains/android/helpers/1/ecj-api-tool.jar" \
+            dev.apkforge.tools.ApkForgeEcjCompiler \
+            ci/build/java-ecj-no-system \
+            "dist/toolchains/android/sdk/36/android.jar:$ADS_CP" \
             ci/samples/BrowserActivity.java ci/samples/AdsSdkProof.java
           test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/BrowserActivity.class
           test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/AdsSdkProof.class
           javap -classpath ci/build/java-ecj-no-system -verbose dev.apkforge.browser.proof.BrowserActivity | grep 'major version: 61'
-          echo 'ECJ Java 17 sans modules système, avec API Android et AppLovin : vérifié.'
+          echo 'ECJ Java 17 par API, sans autodétection JDK et avec vrais SDK : validé.'
       - name: Cataloguer SDK et bibliothèques Android
         run: |
           node ci/build-android-manifest.mjs
