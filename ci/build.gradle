@@ -1,10 +1,12 @@
 // Versioned compile-only dependencies: never build/upload user projects in GitHub Actions.
 plugins { id 'base' }
 repositories { google(); mavenCentral(); maven { url = uri('https://jitpack.io') } }
-configurations { androidCompile }
+configurations { androidCompile; trainManagerAds }
 dependencies {
   androidCompile 'androidx.core:core:1.13.1'
   androidCompile 'com.github.mik3y:usb-serial-for-android:3.11.0'
+  trainManagerAds 'com.applovin:applovin-sdk:+'
+  trainManagerAds 'com.google.android.gms:play-services-ads-identifier:18.2.0'
 }
 tasks.register('stageAndroidClasspath') {
   doLast {
@@ -39,5 +41,57 @@ tasks.register('stageAndroidClasspath') {
     if (!outputs.any { it.contains('usb-serial-for-android') }) throw new GradleException('USB Serial classpath missing')
     if (!outputs.any { it.contains('androidx.core') }) throw new GradleException('AndroidX Core classpath missing')
     logger.lifecycle('Android compile-only libraries: '+outputs.sort().join(', '))
+  }
+}
+
+/**
+ * Stage authentic public Maven inputs only, never user source or ad credentials.
+ * Preserve the AARs for Android resource/manifest handling; classes.jar alone
+ * is NOT enough to provide an installable ad SDK.
+ */
+tasks.register('stageTrainManagerAdsLibraries') {
+  doLast {
+    def work = System.getenv('GITHUB_WORKSPACE') ?: project.projectDir.absolutePath
+    def base = new File(work, 'dist/toolchains/android/deps/trainmanager-ads-v1')
+    def dir = new File(base,'archives')
+    dir.mkdirs()
+    def meta=[]
+    configurations.trainManagerAds.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+      def id=artifact.moduleVersion.id
+      def ext=artifact.extension.toLowerCase()
+      if (!(ext in ['aar','jar'])) throw new GradleException('Unsupported ads artifact: '+artifact.file)
+      def safe=[id.group,id.name,id.version].join('-').replaceAll('[^A-Za-z0-9_.-]','_')
+      def dest=new File(dir,safe+'.'+ext)
+      dest.bytes=artifact.file.bytes
+      def sha=java.security.MessageDigest.getInstance('SHA-256').digest(dest.bytes)
+        .collect { String.format('%02x',it&0xff) }.join('')
+      def info=[group:id.group,name:id.name,version:id.version,extension:ext,
+        file:dest.name,size:dest.length(),sha256:sha]
+      if(ext=='aar'){
+        def zip=new java.util.zip.ZipFile(dest)
+        try {
+          def entries=zip.entries().toList().collect{it.name}
+          info.hasManifest=entries.contains('AndroidManifest.xml')
+          info.hasClasses=entries.contains('classes.jar')
+          info.resourceCount=entries.count{it.startsWith('res/')&&!it.endsWith('/')}
+          info.nativeCount=entries.count{it.startsWith('jni/')&&!it.endsWith('/')}
+          info.assetsCount=entries.count{it.startsWith('assets/')&&!it.endsWith('/')}
+          info.consumerRules=entries.findAll{it.endsWith('proguard.txt')||it.endsWith('consumer-rules.pro')}
+        }finally{zip.close()}
+      }
+      meta << info
+    }
+    meta.sort{a,b->a.file<=>b.file}
+    if(!meta.any{it.group=='com.applovin'&&it.name=='applovin-sdk'})
+      throw new GradleException('AppLovin SDK missing');
+    if(!meta.any{it.group=='com.google.android.gms'&&it.name=='play-services-ads-identifier'})
+      throw new GradleException('Google Ads Identifier missing');
+    new File(base,'resolved.json').text=groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
+      requested:['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0'],
+      artifacts:meta
+    ]))
+    logger.lifecycle('TrainManager Ads resolved '+meta.size()+' public Maven artifacts: '+meta.collect{
+      it.group+':'+it.name+':'+it.version+' ['+it.extension+', res='+it.get('resourceCount',0)+', so='+it.get('nativeCount',0)+']'
+    }.join(', '))
   }
 }

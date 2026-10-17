@@ -166,6 +166,21 @@ jobs:
       - name: Résoudre AndroidX Core et USB Serial uniquement
         run: |
           gradle --no-daemon -p ci stageAndroidClasspath --stacktrace
+      - name: Résoudre le véritable AppLovin MAX et Google Ads Identifier depuis Maven
+        run: |
+          set -euo pipefail
+          gradle --no-daemon -p ci stageTrainManagerAdsLibraries --stacktrace
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p='dist/toolchains/android/deps/trainmanager-ads-v1/resolved.json';
+          const x=JSON.parse(fs.readFileSync(p,'utf8'));
+          if(x.artifacts.length<2)throw Error('Dépendances publicitaires manquantes');
+          for(const a of x.artifacts){
+            if(!/^[0-9a-f]{64}$/.test(a.sha256)||a.size<100)
+              throw Error('Catalogue ad SDK invalide : '+a.file);
+            console.log(a.group+':'+a.name+':'+a.version+' '+a.extension+' res='+a.resourceCount);
+          }
+          NODE
       - name: Construire et tester l'assembleur JAR pour Kotlin dans Chrome
         run: |
           set -euo pipefail
