@@ -40,6 +40,8 @@ jobs:
           node --test tests/aar-merge.test.mjs
           node --check ci/verify-aar-manifests.mjs
           node --check ci/verify-aar-aapt2.mjs
+          node --check ci/verify-aar-r.mjs
+          node --check ci/verify-aar-aapt2-browser.mjs
           node --check src/ads-runtime-dex.mjs
           node --test tests/ads-runtime-dex.test.mjs
           node --check src/gradle-generated.mjs
@@ -401,6 +403,8 @@ jobs:
           node ci/verify-aar-aapt2.mjs
           test -s ci/build/aapt2-real-aars/merged-library-resources.apk
           test -s ci/build/aapt2-real-aars/merged-R.txt
+          node ci/verify-aar-r.mjs
+          test -s ci/build/aar-real-r-classes.jar
       - name: Construire un APK de test avec le WASM et le DEX, puis vérifier sa signature
         run: |
           set -euo pipefail
@@ -464,6 +468,8 @@ jobs:
           node ci/verify-aapt2-wasm-resources.mjs \
             dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
           node ci/verify-aapt2-browser-adapter.mjs \
+            dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
+          node ci/verify-aar-aapt2-browser.mjs \
             dist/wasm/aapt2/aapt2.js dist/toolchains/android/sdk/36/android.jar
           echo "Port AAPT2 WASM réel vérifié dans l'adaptateur navigateur : publication autorisée."
       - name: Préparer le site statique
