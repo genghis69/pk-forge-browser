@@ -237,6 +237,15 @@ jobs:
         run: |
           set -euo pipefail
           ECJ_JAR=dist/toolchains/android/java/ecj/3.43.0/ecj.jar
+          # Authentic Java 17 compile-only classes. Android SDK wins if a type
+          # is defined in both archives. Never feed this JAR to D8 runtime.
+          JAVA_BASE=dist/toolchains/android/java/jdk-17/java-base-compile.jar
+          mkdir -p ci/build/jdk17-base dist/toolchains/android/java/jdk-17
+          "$JAVA_HOME/bin/jmod" extract --dir ci/build/jdk17-base "$JAVA_HOME/jmods/java.base.jmod"
+          jar --create --file "$JAVA_BASE" -C ci/build/jdk17-base/classes .
+          unzip -tqq "$JAVA_BASE"
+          unzip -Z -1 "$JAVA_BASE" | grep -Fx 'java/lang/invoke/LambdaMetafactory.class'
+          unzip -Z -1 "$JAVA_BASE" | grep -Fx 'java/lang/Record.class'
           mkdir -p ci/build/ecj-api-classes dist/toolchains/android/helpers/1 ci/build/java-ecj-no-system
           javac --release 17 -cp "$ECJ_JAR" -d ci/build/ecj-api-classes ci/ApkForgeEcjCompiler.java
           test -s ci/build/ecj-api-classes/dev/apkforge/tools/ApkForgeEcjCompiler.class
@@ -249,7 +258,7 @@ jobs:
           java -cp "$ECJ_JAR:dist/toolchains/android/helpers/1/ecj-api-tool.jar" \
             dev.apkforge.tools.ApkForgeEcjCompiler \
             ci/build/java-ecj-no-system \
-            "dist/toolchains/android/sdk/36/android.jar:$ADS_CP" \
+            "dist/toolchains/android/sdk/36/android.jar:$ADS_CP:$JAVA_BASE" \
             ci/samples/BrowserActivity.java ci/samples/AdsSdkProof.java
           test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/BrowserActivity.class
           test -s ci/build/java-ecj-no-system/dev/apkforge/browser/proof/AdsSdkProof.class
