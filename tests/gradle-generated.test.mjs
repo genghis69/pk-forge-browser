@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {extractGradleBuildSettings,createGradleBuildConfig} from '../src/gradle-generated.mjs';
-const gradle=\`def sdkKey=localProps.getProperty('MAX_SDK_KEY', '').trim()
+const gradle=`def sdkKey=localProps.getProperty('MAX_SDK_KEY', '').trim()
 def rewardedUnit=localProps.getProperty('MAX_REWARDED_AD_UNIT_ID', '').trim()
 buildConfigField 'String', 'MAX_SDK_KEY', quoted(sdkKey)
-buildConfigField 'String', 'MAX_REWARDED_AD_UNIT_ID', quoted(rewardedUnit)\`;
+buildConfigField 'String', 'MAX_REWARDED_AD_UNIT_ID', quoted(rewardedUnit)`;
 const info={namespace:'fr.local.trainmanagersession',packageName:'fr.local.trainmanagersession',
  versionCode:'4',version:'4.0'};
 test('TrainManager : génère BuildConfig Java sans inventer des clés AppLovin',()=>{
