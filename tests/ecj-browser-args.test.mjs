@@ -8,19 +8,16 @@ const args=()=>ecjAndroidArguments({
  outputDir:'/files/apkforge-java/compile-1',
  sources:['/str/MainActivity.java','/str/RewardedAds.java','/str/R.java','/str/BuildConfig.java']
 });
-test('ECJ reste en Java 17 et ne parcourt jamais les modules /lt/17 de CheerpJ',()=>{
+test('Le pont API ECJ reçoit les classes sans scanner le JDK virtuel /lt/17',()=>{
  const argv=args();
- assert.equal(argv[0],'-17');
- assert.deepEqual(argv.slice(2,4),['--system','none']);
- assert.equal(argv.includes('-bootclasspath'),false);
- assert.equal(argv.includes('--release'),false);
+ assert.equal(argv[0],'/files/apkforge-java/compile-1');
+ assert.equal(argv[1],'/str/android.jar:/str/com.applovin-sdk.jar');
+ assert.deepEqual(argv.slice(2),['/str/MainActivity.java','/str/RewardedAds.java','/str/R.java','/str/BuildConfig.java']);
  assert.ok(!argv.join(' ').includes('/lt/17'));
- assert.ok(argv.includes('/str/BuildConfig.java'));
- assert.ok(argv.includes('/str/R.java'));
- assert.ok(argv.includes('-proc:none'));
- assert.ok(argv.includes('UTF-8'));
+ assert.ok(!argv.includes('--system'));
+ assert.ok(!argv.includes('-bootclasspath'));
 });
-test('ECJ doit utiliser exclusivement le vrai SDK Android vérifié',()=>{
+test('Le pont ECJ exige le vrai SDK Android et interdit les sources absentes',()=>{
  assert.throws(()=>ecjAndroidArguments({
   androidJar,classpath:['/str/another.jar'],outputDir:'/files/out',sources:['/str/A.java']
  }),/android.jar/);
