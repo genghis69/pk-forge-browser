@@ -55,6 +55,19 @@ tasks.register('stageTrainManagerAdsLibraries') {
     def base = new File(work, 'dist/toolchains/android/deps/trainmanager-ads-v1')
     def dir = new File(base,'archives')
     dir.mkdirs()
+    def jarDir=new File(base,'jars')
+    jarDir.mkdirs()
+    def jarArtifacts=[]
+    def stageJar={ byte[] bytes,String filename,Map module ->
+      if(bytes.length<100)throw new GradleException('JAR Maven vide: '+filename)
+      def target=new File(jarDir,filename)
+      if(target.exists())throw new GradleException('Collision de noms de JAR: '+filename)
+      target.bytes=bytes
+      def digest=java.security.MessageDigest.getInstance('SHA-256').digest(bytes)
+        .collect { String.format('%02x',it&0xff) }.join('')
+      jarArtifacts << [name:filename,group:module.group,module:module.name,
+        version:module.version,size:bytes.length,sha256:digest]
+    }
     def meta=[]
     configurations.trainManagerAds.resolvedConfiguration.resolvedArtifacts.each { artifact ->
       def id=artifact.moduleVersion.id
@@ -77,7 +90,22 @@ tasks.register('stageTrainManagerAdsLibraries') {
           info.nativeCount=entries.count{it.startsWith('jni/')&&!it.endsWith('/')}
           info.assetsCount=entries.count{it.startsWith('assets/')&&!it.endsWith('/')}
           info.consumerRules=entries.findAll{it.endsWith('proguard.txt')||it.endsWith('consumer-rules.pro')}
+          // Publish the ORIGINAL compiled Maven bytecode. AAR archives are
+          // still mandatory for the later resource and manifest merge.
+          def jars=zip.entries().toList().findAll { e ->
+            !e.isDirectory() && (e.name=='classes.jar' ||
+              (e.name.startsWith('libs/')&&e.name.endsWith('.jar')))
+          }
+          for(def entry : jars){
+            def label=entry.name=='classes.jar'?'classes':
+              entry.name.replaceAll('[^A-Za-z0-9_.-]','_')
+            def filename=safe+'-'+label+'.jar'
+            def bytes=zip.getInputStream(entry).withCloseable { input -> input.readAllBytes() }
+            stageJar(bytes,filename,[group:id.group,name:id.name,version:id.version])
+          }
         }finally{zip.close()}
+      }else{
+        stageJar(dest.bytes,safe+'.jar',[group:id.group,name:id.name,version:id.version])
       }
       meta << info
     }
@@ -86,9 +114,15 @@ tasks.register('stageTrainManagerAdsLibraries') {
       throw new GradleException('AppLovin SDK missing');
     if(!meta.any{it.group=='com.google.android.gms'&&it.name=='play-services-ads-identifier'})
       throw new GradleException('Google Ads Identifier missing');
+    jarArtifacts.sort { a,b -> a.name <=> b.name }
+    for(def required : ['com.applovin:applovin-sdk','com.google.android.gms:play-services-ads-identifier']){
+      if(!jarArtifacts.any { it.group+':'+it.module == required })
+        throw new GradleException('SDK publicitaire sans bytecode Java: '+required)
+    }
     new File(base,'resolved.json').text=groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([
       requested:['com.applovin:applovin-sdk:+','com.google.android.gms:play-services-ads-identifier:18.2.0'],
-      artifacts:meta
+      artifacts:meta,
+      jarArtifacts:jarArtifacts
     ]))
     logger.lifecycle('TrainManager Ads resolved '+meta.size()+' public Maven artifacts: '+meta.collect{
       it.group+':'+it.name+':'+it.version+' ['+it.extension+', res='+it.get('resourceCount',0)+', so='+it.get('nativeCount',0)+']'
