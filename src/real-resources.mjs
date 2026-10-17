@@ -13,6 +13,8 @@ import {assertApkLaunchClasses,definedDexClasses} from './apk-launch-check.mjs';
 import {verifyDexIntegrity,assertManifestProvidersPresent} from './dex-integrity.mjs';
 import {extractGradleBuildSettings} from './gradle-generated.mjs';
 import {assertNoUnmergedAdsApk} from './ads-dependencies.mjs';
+import {loadVerifiedAars,mergeAarManifests,collectAarExtraFiles} from './aar-merge.mjs';
+import {toolchainUrl} from './toolchain-paths.mjs';
 let session=null,wasm=null;
 const $=id=>document.getElementById(id);
 const info=s=>{const box=$('realResourcesLog');if(box){box.textContent+='\n['+new Date().toLocaleTimeString('fr-FR')+'] '+s;box.scrollTop=box.scrollHeight;}};
@@ -105,7 +107,9 @@ async function engine(){
  if(wasm)return wasm;
  const m=await import('../wasm/pack/pack_wasm.js');
  await m.default();
- if(typeof m.apkforge_resource_ids!=='function'||typeof m.apkforge_sign_with_dex!=='function'||typeof m.apkforge_sign_linked_apk!=='function')
+ if(typeof m.apkforge_resource_ids!=='function'||typeof m.apkforge_sign_with_dex!=='function'||
+    typeof m.apkforge_sign_linked_apk!=='function'||
+    typeof m.apkforge_sign_linked_apk_with_extra!=='function')
   throw Error('Google Pack WASM doit être reconstruit avec les extensions APK Forge.');
  wasm=m;return m;
 }
@@ -133,13 +137,39 @@ export async function prepareRealResources(project){
   sourceManifest=config.manifestPlaceholder(sourceManifest);
   info('Manifest Gradle : maxSdkKey résolu localement (vide sans identifiants AppLovin).');
  }
- const manifest=normalizedManifest(sourceManifest,data);
- const aapt2=await compileAapt2Wasm({project,manifest,resourcePaths});
+ let manifest=normalizedManifest(sourceManifest,data);
+ let aarState=null;
+ const hasAds=(data.dependencies||[]).some(x=>x.startsWith('com.applovin:'));
+ if(hasAds){
+  info('TrainManager : téléchargement des AAR Maven authentiques et vérification SHA-256.');
+  const response=await fetch(toolchainUrl('android/manifest.json',import.meta.url),{cache:'no-store'});
+  if(!response.ok)throw Error('Catalogue SDK AAR indisponible (HTTP '+response.status+').');
+  const catalog=await response.json();
+  const libs=await loadVerifiedAars(catalog.trainManagerAds,{progress:info});
+  const merged=mergeAarManifests(manifest,libs,{
+   applicationId:data.packageName,minSdk:Number(data.minSdk)
+  });
+  manifest=merged.manifest;
+  aarState={libs,packages:merged.packages,extraFiles:collectAarExtraFiles(libs),
+   mergedManifestCount:merged.libraryCount,aarRCompiled:false,aarReady:false};
+  info('AAR : '+merged.libraryCount+' manifestes fusionnés, '+merged.packages.length+
+   ' namespaces de R à produire, '+aarState.extraFiles.length+' assets/JNI.');
+ }
+ const aapt2=await compileAapt2Wasm({project,manifest,resourcePaths,
+  aarLibraries:aarState?.libs||[]});
  if(aapt2){
   const namespace=data.namespace!=='Non précisé'?data.namespace:data.packageName;
   linkedRCode(namespace,aapt2.ids,sourceTexts);
+  if(aarState){
+   // All advertised AAR resources must actually be compiled and linked by
+   // AAPT2 (not merely listed in a catalog).
+   aarState.aarReady=true;
+   info('AAPT2 AAR : '+Object.keys(aapt2.ids).length+
+    ' IDs finaux liés. Les R.java des namespaces Maven seront compilés par ECJ.');
+  }
   session={zip:project.zip,project,ids:aapt2.ids,linkedApkBase64:to64(aapt2.apk),
-   signingPem:await developmentPem(),sourceTexts,namespace,normalizedManifest:manifest,engine:'aapt2-wasm'};
+   signingPem:await developmentPem(),sourceTexts,namespace,normalizedManifest:manifest,
+   aarState,engine:'aapt2-wasm'};
   refreshApkButton(project.zip,null);
   info('AAPT2 WASM : compile/link exécutés, '+Object.keys(aapt2.ids).length+' IDs issus du R.txt réel.');
   info('Recompiler Kotlin avec ces IDs puis lancer D8 avant signature.');
@@ -189,8 +219,8 @@ export async function prepareRealResources(project){
  return session;
 }
 export async function assembleRealApk(project,artifact){
- assertNoUnmergedAdsApk(project?.analysis);
  const prepared=getResourceSession(project);
+ assertNoUnmergedAdsApk(project?.analysis,prepared);
  if(!prepared)throw Error('Compile les ressources avec Google Pack avant de construire un APK.');
  if(artifact?.linkedResourceSession!==prepared||!artifact.runtimeZip)
   throw Error('Recompile Kotlin avec les IDs R réels, puis exécute la fusion D8. Les anciens DEX de diagnostic ne sont pas acceptés.');
@@ -228,7 +258,11 @@ export async function assembleRealApk(project,artifact){
  info('ContentProviders du manifeste vérifiés : '+providers.length+' classe(s), notamment FileProvider si déclaré.');
  info('Assemblage ZIP, alignement et signature v2/v3 APRÈS insertion de '+payload.length+' DEX...');
  const wasm=await engine();
- const signed=prepared.engine==='aapt2-wasm'
+ const extra=prepared.aarState?.extraFiles||[];
+ const signed=extra.length
+  ? wasm.apkforge_sign_linked_apk_with_extra(prepared.linkedApkBase64,payload,
+     extra.map(file=>[file.path,to64(file.data)]),prepared.signingPem)
+  : prepared.engine==='aapt2-wasm'
   ? wasm.apkforge_sign_linked_apk(prepared.linkedApkBase64,payload,prepared.signingPem)
   : wasm.apkforge_sign_with_dex(prepared.input,payload);
  const out=new Blob([from64(signed)],{type:'application/vnd.android.package-archive'});
@@ -248,6 +282,15 @@ export async function assembleRealApk(project,artifact){
  for(const name of ['AndroidManifest.xml','resources.arsc',...names]){
   if(!finalZip.file(name))throw Error('APK incomplet : '+name);
  }
+ for(const file of prepared.aarState?.extraFiles||[]){
+  const actual=await finalZip.file(file.path)?.async('uint8array');
+  if(!actual||actual.length!==file.data.length||
+     actual.some((value,i)=>value!==file.data[i]))
+   throw Error('Asset/JNI Maven absent ou différent après signature : '+file.path);
+ }
+ if(prepared.aarState)
+  info('Fichiers AAR intégrés à l’APK signé : '+prepared.aarState.extraFiles.length+
+   ' assets/JNI vérifiés octet pour octet.');
  info('APK signé '+prepared.engine+' construit dans Chrome ('+(out.size/1024).toFixed(1)+' Kio). Signature à vérifier avant installation.');
  return out;
 }
