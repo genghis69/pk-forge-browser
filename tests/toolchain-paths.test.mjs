@@ -37,3 +37,13 @@ test("Vérification HEAD : affiche les fichiers manquants AVANT de lancer Java",
  assert.equal(requested.length,3);
  assert.ok(requested.every(x=>x.method==="HEAD"));
 });
+
+test("ECJ Java 17 : URL publique et chemin CheerpJ correspondent au répertoire réel",()=>{
+ const ecj='android/java/ecj/3.43.0/ecj.jar';
+ assert.equal(toolchainUrl(ecj,gh).href,
+  'https://genghis69.github.io/pk-forge-browser/toolchains/android/java/ecj/3.43.0/ecj.jar');
+ assert.equal(toCheerpJPath(ecj,gh),
+  '/app/pk-forge-browser/toolchains/android/java/ecj/3.43.0/ecj.jar');
+ assert.notEqual(toolchainUrl(ecj,gh).pathname,
+  '/pk-forge-browser/toolchains/java/ecj/3.43.0/ecj.jar');
+});
