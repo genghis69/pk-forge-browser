@@ -365,6 +365,14 @@ async function buildJavaGroup(project){
   expectedSize:adapter.size,sha256:adapter.sha256,moduleUrl,
   fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
  });
+ const javaBase=javaCompiler.javaBase;
+ if(!javaBase?.relative||!javaBase.sha256||javaBase.compileOnly!==true)
+  throw Error('Java 17 : classes standard authentiques java.base absentes du catalogue. Compilation suspendue.');
+ const javaBasePath=await mountJar({
+  relative:javaBase.relative,filename:javaBase.name,
+  expectedSize:javaBase.size,sha256:javaBase.sha256,moduleUrl,
+  fetchFn:fetch,addFn:cheerpOSAddStringFile,progress:log
+ });
  const runId=Date.now().toString(36);
  const compiled='/files/apkforge-java/classes-'+runId;
  const Paths=await runtime.library.java.nio.file.Paths;
@@ -388,6 +396,9 @@ async function buildJavaGroup(project){
  log('BuildConfig Java 17 généré localement : identifiants MAX vides comme dans le ZIP sans local.properties.');
  const javaPaths=[...classpath.filter(x=>x.kind==='platform'||x.kind==='dependency'),
   ...adsClasspath].map(x=>x.path);
+ // Real OpenJDK Java 17 classes complement missing java.lang.invoke types.
+ // NEVER add this compile-only library to lastCompilation.classpath / D8.
+ javaPaths.push(javaBasePath);
  const ecjArgs=ecjAndroidArguments({androidJar:jarRoot.path,
   classpath:javaPaths,outputDir:compiled,sources:mountedSources});
  log('Compilation ECJ Java 17 de '+profile.paths.length+' sources avec '+Object.keys(linkedSession.ids).length+' IDs AAPT2 réels.');
