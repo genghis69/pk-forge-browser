@@ -10,6 +10,7 @@ import {toolchainUrl} from './toolchain-paths.mjs';
 import {validateCompilerArtifact} from './compiler-results.mjs';
 import {getKotlinRuntime} from './kotlin-lab.mjs';
 import {planRuntimeJars,dexFilename,checkRuntimeInputs} from './runtime-dex.mjs';
+import {planAdsRuntimeDex} from './ads-runtime-dex.mjs';
 import {createExecutionObserver,formatElapsed} from './compilation-observer.mjs';
 import {d8ThreadFlags,d8ThreadDescription} from './d8-threading.mjs';
 import {getResourceSession,linkedRCode,refreshApkButton} from './real-resources.mjs';
@@ -204,14 +205,24 @@ async function compileStandaloneDex(){
  */
 async function buildRuntimeDex(){
  lastD8Diagnostic=null;
- if(lastCompilation?.apkBlockedReason)throw Error(lastCompilation.apkBlockedReason);
+ // D8 des vrais JAR publicitaires est possible, l'APK reste bloqué jusqu'à la fusion AAR.
  if(!lastCompilation)throw Error('Compile les sources Java ou Kotlin avant de générer les DEX avec les bibliothèques.');
  const {jarPath,jarRoot,classpath,runtime,sourceCount,classCount}=lastCompilation;
- const plan=planRuntimeJars(classpath);
- checkRuntimeInputs(plan,jarBlob);
- if(!runtime.manifest?.jars?.includes(plan.stdlib))throw Error('Kotlin stdlib '+plan.stdlib+' non chargée.');
- log('D8 runtime : '+plan.dependencies.length+' dépendances Android plus Kotlin '+runtime.manifest.version+'.');
- for(const skipped of plan.skipped)log('Exclusion du doublon : '+skipped.name+' ('+skipped.reason+').');
+ const javaAds=lastCompilation.language==='java'&&lastCompilation.adsClasspath?.length>0;
+ const plan=javaAds?planAdsRuntimeDex({
+  language:'java',adsClasspath:lastCompilation.adsClasspath,
+  appJar:jarPath,androidJar:jarRoot.path,minSdk:lastCompilation.minSdk
+ }):planRuntimeJars(classpath);
+ if(!javaAds){
+  checkRuntimeInputs(plan,jarBlob);
+  if(!runtime.manifest?.jars?.includes(plan.stdlib))
+   throw Error('Kotlin stdlib '+plan.stdlib+' non chargée.');
+  log('D8 runtime : '+plan.dependencies.length+' dépendances Android plus Kotlin '+runtime.manifest.version+'.');
+  for(const skipped of plan.skipped)log('Exclusion du doublon : '+skipped.name+' ('+skipped.reason+').');
+ }else{
+  log('D8 Java TrainManager : '+plan.dependencyCount+' vrais JAR Maven AppLovin/Google.');
+  log('Java 17 utilisé pour la compilation ; aucun java.base compile-only injecté à D8.');
+ }
  const dexJar=await mountJar({
    relative:'r8/'+runtime.manifest.d8Version+'/'+runtime.manifest.d8Jar,
    filename:runtime.manifest.d8Jar,expectedSize:runtime.manifest.d8Size,
@@ -225,9 +236,12 @@ async function buildRuntimeDex(){
  // D8 can output a ZIP itself. This avoids the old CheerpJ individual-files
  // output path, which produced a malformed DEX with duplicate map type 0.
  const d8ArchivePath=outputDir+'/elm327-runtime-dex-'+Date.now().toString(36)+'.zip';
- const argv=['--min-api',String(lastCompilation.minSdk||26),...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,'--output',d8ArchivePath,
-  jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
- log('D8 '+runtime.manifest.d8Version+' : '+(plan.dependencies.length+2)+' JAR d’entrée, minSdk 26.');
+ const programs=javaAds?plan.programJars:
+  [jarPath,virtualJarPath(plan.stdlib),...plan.dependencies.map(x=>x.path)];
+ const argv=['--min-api',String(lastCompilation.minSdk||26),
+  ...d8ThreadFlags(selectedD8ThreadMode()),'--lib',jarRoot.path,
+  '--output',d8ArchivePath,...programs];
+ log('D8 '+runtime.manifest.d8Version+' : '+programs.length+' JAR d’entrée, minSdk '+lastCompilation.minSdk+'.');
  log('Réglage D8 : '+d8ThreadDescription(selectedD8ThreadMode())+'.');
  log('Mode D8 natif : sortie ZIP (au lieu de fichiers DEX séparés).');
  log('Traitement complet des bibliothèques. Cette étape peut prendre plusieurs minutes.');
@@ -273,7 +287,7 @@ async function buildRuntimeDex(){
     report.file('dex-map-diagnostic.json',JSON.stringify({
      generated:new Date().toISOString(),error:error.message,details,
      mode:'CheerpJ D8 direct ZIP',d8Version:runtime.manifest.d8Version,
-     threadMode:selectedD8ThreadMode(),dependencyNames:plan.dependencies.map(x=>x.name)
+     threadMode:selectedD8ThreadMode(),dependencyNames:javaAds?plan.names:plan.dependencies.map(x=>x.name)
     },null,2));
     const payload=await report.generateAsync({type:'blob',compression:'STORE'});
     lastD8Diagnostic=payload;
@@ -294,23 +308,30 @@ async function buildRuntimeDex(){
  }
  const receipt={
   kind:'ANDROID_RUNTIME_DEX_DIAGNOSTIC',
-  sourcesKotlin:sourceCount,
+  language:lastCompilation.language,
+  sourceFiles:sourceCount,
   classFilesJVM:classCount,
-  runtimeDependencies:plan.dependencies.map(d=>d.name),
-  excluded:plan.skipped,
+  runtimeDependencies:javaAds?plan.names:plan.dependencies.map(d=>d.name),
+  excluded:javaAds?[]:plan.skipped,
   containsAppAndDependencies:true,
-  resourceIdsLinked:false,
-  aapt2Completed:false,
-  androidManifestCompiled:false,
-  apkInstallable:false,
-  warning:'Fichiers DEX de diagnostic issus des sources Kotlin, R provisoire, sans APK signé.'
+  resourceIdsLinked:!!lastCompilation.linkedResourceSession,
+  aapt2Completed:!!lastCompilation.linkedResourceSession,
+  androidManifestCompiled:!!lastCompilation.linkedResourceSession,
+  apkInstallable:!lastCompilation.apkBlockedReason,
+  warning:lastCompilation.apkBlockedReason||'Fichiers DEX de diagnostic ; assemblage APK requis.'
  };
  zip.file('COMPILATION_DIAGNOSTIC.json',JSON.stringify(receipt,null,2));
  runtimeZip=await zip.generateAsync({type:'blob',compression:'STORE'});
- refreshApkButton(lastCompilation?.sourceZip,{runtimeZip,linkedResourceSession:lastCompilation.linkedResourceSession});
+ refreshApkButton(lastCompilation?.sourceZip,
+  lastCompilation.apkBlockedReason?null:{runtimeZip,linkedResourceSession:lastCompilation.linkedResourceSession});
  el('androidRuntimeDownload').disabled=false;
  log('SUCCÈS : '+dexFiles+' DEX, '+(bytes/1024/1024).toFixed(2)+' Mio, '+((performance.now()-started)/1000).toFixed(1)+' secondes.');
- status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). '+(lastCompilation.linkedResourceSession?'Prêt pour assembler et signer l’APK.':'Compile les ressources AAPT2 avant assemblage.'),true);
+ if(lastCompilation.apkBlockedReason){
+  log('ARRÊT SIGNATURE APK : '+lastCompilation.apkBlockedReason);
+  status('DEX Java et SDK publicitaires générés. Diagnostic ZIP disponible ; APK AAR non encore supporté.',true);
+ }else{
+  status('DEX du code + bibliothèques généré ('+dexFiles+' fichier(s)). '+(lastCompilation.linkedResourceSession?'Prêt pour assembler et signer l’APK.':'Compile les ressources AAPT2 avant assemblage.'),true);
+ }
 }
 function download(blob,name){
  if(!blob)throw Error('Aucun fichier généré.');
@@ -419,14 +440,13 @@ async function buildJavaGroup(project){
  jarBlob=blob;
  lastCompilation={jarPath,jarRoot,classpath,runtime,sourceCount:profile.paths.length,
   classCount:count,linkedResourceSession:linkedSession,sourceZip:project.zip,language:'java',
-  minSdk:profile.minSdk,apkBlockedReason:profile.apkBlockedReason};
+  minSdk:profile.minSdk,apkBlockedReason:profile.apkBlockedReason,adsClasspath};
  el('androidCompileDex').disabled=false;
  el('androidRuntimeDex').disabled=false;
  el('androidJarDownload').disabled=false;
  if(profile.apkBlockedReason){
-  el('androidRuntimeDex').disabled=true;
-  log('ARRÊT APK : '+profile.apkBlockedReason);
-  status('ECJ Java : '+count+' classes JVM compilées. '+profile.apkBlockedReason,true);
+  log('D8 des vrais SDK publicitaires autorisé, mais APK toujours suspendu : '+profile.apkBlockedReason);
+  status('ECJ Java : '+count+' classes JVM compilées. D8 Maven possible, APK AAR suspendu.',true);
  }else{
   log('ECJ : '+count+' classes Java compilées. D8 utilisera les classes et bibliothèques Android.');
   status('ECJ Java compilé : '+count+' classes JVM prêtes pour D8.',true);
@@ -451,7 +471,7 @@ export async function compileJavaForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
+  el('androidRuntimeDex').disabled=!lastCompilation;
  }
 }
 
@@ -478,7 +498,7 @@ export async function compileKotlinForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
+  el('androidRuntimeDex').disabled=!lastCompilation;
  }
 }
 export async function compileRuntimeDexForApk(project){
@@ -502,7 +522,7 @@ export async function compileRuntimeDexForApk(project){
   locked=false;
   el('androidCompileAll').disabled=false;
   el('androidCompileDex').disabled=!lastCompilation;
-  el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;
+  el('androidRuntimeDex').disabled=!lastCompilation;
  }
 }
 export function getRuntimeArtifacts(){
@@ -517,7 +537,7 @@ export function attachAndroidCompiler(getProject){
   status('D8 : conversion des classes Kotlin en cours. JAR déjà compilé et disponible...');
   try{await compileStandaloneDex();}
   catch(e){log('ERREUR D8 : '+e.message);status('La conversion D8 a échoué ou s’est interrompue : '+e.message+'. Le JAR JVM reste disponible.');console.error('APK Forge D8 standalone',e);}
-  finally{locked=false;el('androidCompileDex').disabled=!lastCompilation;el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;el('androidCompileAll').disabled=false;}
+  finally{locked=false;el('androidCompileDex').disabled=!lastCompilation;el('androidRuntimeDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
  });
  el('androidReloadCompiler')?.addEventListener('click',()=>{
   if(window.confirm('Recharger la page pour interrompre la JVM ? Réimporte le ZIP ensuite.'))window.location.reload();
@@ -529,7 +549,7 @@ export function attachAndroidCompiler(getProject){
   runtimeZip=null;el('androidRuntimeDownload').disabled=true;
   try{await buildRuntimeDex();}
   catch(e){log('ERREUR RUNTIME : '+e.message);status('Fusion runtime interrompue : '+e.message);console.error('APK Forge runtime D8',e);}
-  finally{locked=false;el('androidRuntimeDex').disabled=!lastCompilation||!!lastCompilation.apkBlockedReason;el('androidCompileDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
+  finally{locked=false;el('androidRuntimeDex').disabled=!lastCompilation;el('androidCompileDex').disabled=!lastCompilation;el('androidCompileAll').disabled=false;}
  });
  el('androidCompileAll').addEventListener('click',async()=>{
   if(locked)return;locked=true;jarBlob=null;dexBlob=null;runtimeZip=null;lastCompilation=null;
